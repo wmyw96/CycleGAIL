@@ -42,19 +42,22 @@ class SpinDrive3D(gym.Env):
         self.np_random, seed = seeding.np_random(seed)
         return [seed]
 
-    def reset(self):
-        pos = self.np_random.uniform(low=-self.range / 2,
-                                     high=self.range / 2,
-                                     size=(3,))
-        pos[0] += self.radius
-        pos[2] = 0
+    def reset(self, state=None):
+        if state is None:
+            pos = self.np_random.uniform(low=-self.range / 2,
+                                         high=self.range / 2,
+                                         size=(3,))
+            pos[0] += self.radius
+            pos[2] = 0
+        else:
+            pos = state
         self.state = pos
         self.state_list = []
         return self.state
 
     # suppose u is a 3-dim vector
     def step(self, u):
-        u = np.clip(u, -self.max_velocity, self.max_velocity)
+        # u = np.clip(u, -self.max_velocity, self.max_velocity)
         pos = self.state + u * self.dt
 
         t = pos[2] / self.alpha

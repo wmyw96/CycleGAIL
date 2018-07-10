@@ -31,7 +31,6 @@ class CircleDrive2D:
         self.v = np.zeros((2))
         self.pos_list.append(self.pos)
 
-
     def step(self, a):
         old_pos = self.pos
         old_v = self.v
@@ -63,7 +62,6 @@ class CircleDrive2D:
     def state(self):
         return np.concatenate([self.pos, self.v])
 
-
     def reward(self):
         dif = self.pos - np.array([0.0, self.radius])
         dist = np.sqrt(np.sum(dif * dif))
@@ -74,12 +72,10 @@ class CircleDrive2D:
             bias = (np.abs(dist - self.radius) - self.range)
             return 1 - bias * bias
 
-
     def set_state(self, pos, v):
         self.pos = pos
         self.v = v
         self.pos_list.append(self.pos)
-
 
     def check(self):
         if (len(self.pos_list) > self.nsteps):
@@ -88,7 +84,6 @@ class CircleDrive2D:
             (self.pos[1] > self.upper_y) or (self.pos[1] < self.lower_x):
             return False
         return True
-
 
     def output_img(self, filepath=None, is3D=False):
         xdata = [pos[0] for pos in self.pos_list]

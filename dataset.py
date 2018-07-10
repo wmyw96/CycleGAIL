@@ -25,7 +25,7 @@ class Demonstrations(object):
             self.pointer = 1
             return self.demos[self.indexs[0]]
         self.pointer += 1
-        return self.demos[self.indexs[self.pointer] - 1]
+        return self.demos[self.indexs[self.pointer - 1]]
 
     def load(self, file_name, nitems):
         if os.path.isdir(file_name):
@@ -49,5 +49,4 @@ class Demonstrations(object):
         for i in range(len(self.demos)):
             state, action = self.demos[i]
             np.save(file_name + 'traj%d_obs.npy' % i, state)
-            np.load(file_name + 'traj%d_act.npy' % i, action)
-
+            np.save(file_name + 'traj%d_act.npy' % i, action)
