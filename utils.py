@@ -1,7 +1,57 @@
-import gym
 import numpy as np
 import matplotlib.pyplot as plt
 from mpl_toolkits.mplot3d import Axes3D
+import tensorflow as tf
+import warnings
+from sn import spectral_normed_weight
+
+
+def lrelu(x, alpha=0.2):
+    # return tf.nn.tanh(x)
+    return tf.nn.relu(x)
+    # return tf.maximum(x, x * alpha)
+
+
+def cycle_loss(origin, reconstructed, metric, name=None):
+    if metric == 'L1':
+        return tf.reduce_mean(tf.abs(origin - reconstructed), name=name)
+    if metric == 'L2':
+        return tf.reduce_mean(tf.square(origin - reconstructed), name=name)
+    raise NotImplementedError
+
+
+def dense_layer(inp, size, name, weight_init, bias_init=0, bias=True,
+                reuse=None, spectral_weight=False, update_collection=None):
+    with tf.variable_scope(name, reuse=reuse):
+        w = tf.get_variable('w', [inp.get_shape()[1], size],
+                            initializer=weight_init)
+        if spectral_weight:
+            warnings.warn('You are now using spectral weight trick')
+            w = spectral_normed_weight(w, update_collection=update_collection)
+        if bias:
+            b = tf.get_variable('b', [size],
+                                initializer=tf.constant_initializer(bias_init))
+            return tf.nn.bias_add(tf.matmul(inp, w), b)
+        else:
+            return tf.matmul(inp, w)
+
+
+def get_flatten_dim(shape):
+    dim = 1
+    for sub_dim in shape:
+        dim *= int(sub_dim)
+    return dim
+
+
+# copy from openai/baselines/common/tf_util
+def normc_initializer(std=1.0, axis=0):
+    def _initializer(shape, dtype=None, partition_info=None):
+        # pylint: disable=W0613
+        out = np.random.randn(*shape).astype(np.float32)
+        out *= std / np.sqrt(np.square(out).sum(axis=axis, keepdims=True))
+        return tf.constant(out)
+    return _initializer
+
 
 def greedy_reject_sampling(state, alpha, radius, rg, stepsize):
     dpos = np.random.uniform(-stepsize, stepsize, size=(3,))
@@ -47,9 +97,12 @@ def spindrive3d_generate_random_trajectories(nsteps, radius=5, alpha=1,
     return state, action
 
 
-def show_trajectory(env, state, action):
+def show_trajectory(env, state, action, init_state=None, filename=None):
     obs = np.zeros_like(state)
-    obs[0, :] = env.reset(state[0, :])
+    if init_state is None:
+        init_state = state[0, :]
+    obs[0, :] = env.reset(init_state)
+    #print(obs[0, :])
     for i in range(len(action) - 1):
         obs[i + 1, :], _, _, _ = env.step(action[i, :])
     #env.render()
@@ -63,4 +116,34 @@ def show_trajectory(env, state, action):
     ax3.plot(state[:, 0], state[:, 1])
     ax4 = figure.add_subplot(224)
     ax4.plot(obs[:, 0], obs[:, 1])
-    plt.show()
+    if filename is not None:
+        plt.savefig(filename)
+        plt.close()
+    else:
+        plt.show()
+
+
+def distribution_diff(state0, action0, state1, action1, state2, action2,
+                      filename=None):
+    figure = plt.figure(figsize=(8, 8))
+    ax1 = figure.add_subplot(221)
+    ax1.scatter(state0[:, 0], action0[:, 0], color='b', s=0.5)
+    ax1.scatter(state1[:, 0], action1[:, 0], color='r', s=0.5)
+    ax1.scatter(state2[:, 0], action2[:, 0], color='y', s=0.5)
+    ax2 = figure.add_subplot(222)
+    ax2.scatter(state0[:, 1], action0[:, 1], color='b', s=0.5)
+    ax2.scatter(state1[:, 1], action1[:, 1], color='r', s=0.5)
+    ax2.scatter(state2[:, 1], action2[:, 1], color='y', s=0.5)
+    ax3 = figure.add_subplot(223)
+    ax3.scatter(state0[:, 0], action0[:, 1], color='b', s=0.5)
+    ax3.scatter(state1[:, 0], action1[:, 1], color='r', s=0.5)
+    ax3.scatter(state2[:, 0], action2[:, 1], color='y', s=0.5)
+    ax4 = figure.add_subplot(224)
+    ax4.scatter(state0[:, 1], action0[:, 0], color='b', s=0.5)
+    ax4.scatter(state1[:, 1], action1[:, 0], color='r', s=0.5)
+    ax4.scatter(state2[:, 1], action2[:, 0], color='y', s=0.5)
+    if filename is not None:
+        plt.savefig(filename)
+        plt.close()
+    else:
+        plt.show()

@@ -97,7 +97,7 @@ class CircleDrive2D:
             ax.plot(xdata, ydata, zdata)
         else:
             plt.figure(figsize=(7, 7))
-            plt.plot(xdata, ydata, color = 'red', linewidth=1)
+            plt.plot(xdata, ydata, color='red', linewidth=1)
         plt.xlim(self.lower_x, self.upper_x)
         plt.ylim(self.lower_y, self.upper_y)
         if filepath == None:
