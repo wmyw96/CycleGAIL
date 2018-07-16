@@ -16,6 +16,6 @@
 
 ```
 pip3 install mujoco-py==0.5.7
-pip3 install mujoco==0.9.1
+pip3 install gym==0.9.1
 ```
 

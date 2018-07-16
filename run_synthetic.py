@@ -66,6 +66,10 @@ parser.add_argument('--orac', dest='orac', type=bool, default=True,
 """Dataset setting"""
 parser.add_argument('--ntraj', dest='ntraj', type=int, default=20,
                     help='# of trajctories in the data set')
+parser.add_argument('--nd1', dest='nd1', type=int, default=10,
+                    help='# of expert 1 trajectories for training')
+parser.add_argument('--nd2', dest='nd2', type=int, default=10,
+                    help='# of expert 2 trajectoreis for training')
 parser.add_argument('--len', dest='len', type=int, default=300,
                     help='horizon of the trajectory (fixed)')
 
@@ -89,6 +93,8 @@ if args.mode == 'train':
     print('Load data : Expert #2 Demonstrations')
     demos_b.load('data/SpinDrive3D_%d_%d_5.00_2.00_0.05_0.05' %
                  (args.ntraj, args.len), args.ntraj)
+    demos_a.set(args.nd1)
+    demos_b.set(args.nd2)
     print('Load data finished !')
     enva = SpinDrive3D(5, 1, 0.2)
     envb = SpinDrive3D(5, 2, 0.2)
@@ -114,7 +120,7 @@ if args.mode == 'train':
 Recommended command:
 python run_synthetic.py --name logs/csyn-wgan --lr 0.00005 --clip 0.01 --nhid 128 --loss_metric L2 --epoch 100000
 python run_synthetic.py --name logs/csyn-wgan-gp-128 --lr 0.0001 --clip 0.01 --nhid 128 --loss_metric L2 --epoch 100000 --ntraj 100 --gam 1.0 --lg 1.0 --lf 1.0 --loss wgan-gp
-python run_synthetic.py --name logs/csyn-wgan-gp-30 --lr 0.0001 --clip 0.01 --nhid 10 --loss_metric L2 --epoch 100000 --ntraj 100 --gam 1.0 --lg 1.0 --lf 1.0 --loss wgan-gp
+python run_synthetic.py --name logs/csyn-wgan-gp-30 --lr 0.0001 --clip 0.01 --nhid 10 --loss_metric L2 --epoch 100000 --ntraj 100 --gam 1.0 --lg 1.0 --lf 1.0 --loss wgan-gp --nd1 25 --nd2 25
 python run_synthetic.py --name logs/csyn-wgan-gp-30 --lr 0.0001 --clip 0.01 --nhid 10 --loss_metric L2 --epoch 100000 --ntraj 100 --gam 0.0 --lg 1.0 --lf 1.0 --loss wgan-gp
 
 '''

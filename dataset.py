@@ -9,23 +9,54 @@ class Demonstrations(object):
         self.seed_b = b
         self.seed_mod = mod
         self.demos = []
-        self.indexs = []
+        self.train_indexs = []
+        self.test_indexs = []
         self.pointer = 0
+        self.test_demos = []
+        self.test_pointer = 0
+        self.train_demos = []
+        self.train_pointer = 0
 
     def add_demo(self, state, action):
         self.demos.append((state, action))
         self.pointer = len(self.demos)
 
-    def next_demo(self):
-        if self.pointer == len(self.demos):
-            self.seed = (self.seed * self.seed_a + self.seed_b) % self.seed_mod
-            arr = np.arange(self.pointer)
-            np.random.shuffle(arr)
-            self.indexs = [int(i) for i in arr]
-            self.pointer = 1
-            return self.demos[self.indexs[0]]
-        self.pointer += 1
-        return self.demos[self.indexs[self.pointer - 1]]
+    def next_demo(self, train=True):
+        if train:
+            if self.train_pointer == len(self.train_demos):
+                self.seed = (self.seed * self.seed_a + self.seed_b) \
+                            % self.seed_mod
+                arr = np.arange(self.train_pointer)
+                np.random.shuffle(arr)
+                self.train_indexs = [int(i) for i in arr]
+                self.train_pointer = 1
+                return self.train_demos[self.train_indexs[0]]
+            self.train_pointer += 1
+            return self.train_demos[self.train_indexs[self.train_pointer - 1]]
+        else:
+            if self.test_pointer == len(self.test_demos):
+                self.seed = (self.seed * self.seed_a + self.seed_b) \
+                            % self.seed_mod
+                arr = np.arange(self.test_pointer)
+                np.random.shuffle(arr)
+                self.test_indexs = [int(i) for i in arr]
+                self.test_pointer = 1
+                return self.test_demos[self.test_indexs[0]]
+            self.test_pointer += 1
+            return self.test_demos[self.test_indexs[self.test_pointer - 1]]
+
+    def set(self, num_trains):
+        if num_trains >= self.pointer:
+            raise ValueError('Number of train trajectories is larger than '
+                             'number of total trajectories\n')
+        self.train_demos = []
+        self.test_demos = []
+        for i in range(num_trains):
+            self.train_demos.append(self.demos[i])
+        self.train_pointer = num_trains
+        for i in range(self.pointer - num_trains):
+            self.test_demos.append(self.demos[i + num_trains])
+        self.test_pointer = self.pointer - num_trains
 
     def load(self, file_name, nitems):
         if os.path.isdir(file_name):

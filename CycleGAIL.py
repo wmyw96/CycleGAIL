@@ -143,10 +143,10 @@ class CycleGAIL(object):
 
     def gen_net(self, prefix, inp, out_dim):
         pre_dim = int(inp.get_shape()[-1])
-        if prefix == 'f_a':
-            return inp * np.array([[1, 1, 0.5]])
-        if prefix == 'f_b':
-            return inp * np.array([[1, 1, 2.0]])
+        # if prefix == 'f_a':
+        #     return inp * np.array([[1, 1, 0.5]])
+        # if prefix == 'f_b':
+        #     return inp * np.array([[1, 1, 2.0]])
         out = relu_layer(prefix + '.1', pre_dim, self.hidden, inp)
         out = relu_layer(prefix + '.2', self.hidden, self.hidden, out)
         out = relu_layer(prefix + '.3', self.hidden, self.hidden, out)
@@ -172,9 +172,9 @@ class CycleGAIL(object):
         for param in params:
             print(param.name, ': ', param.get_shape())
 
-    def get_demo(self, expert_a, expert_b):
-        obs_a, act_a = expert_a.next_demo()
-        obs_b, act_b = expert_b.next_demo()
+    def get_demo(self, expert_a, expert_b, is_train=True):
+        obs_a, act_a = expert_a.next_demo(is_train)
+        obs_b, act_b = expert_b.next_demo(is_train)
         demos = {self.real_obs_a: obs_a,
                  self.real_act_a: act_a,
                  self.real_obs_b: obs_b,
@@ -307,7 +307,7 @@ class CycleGAIL(object):
 
     def visual_evaluation(self, expert_a, expert_b, id):
         # a2b
-        demos = self.get_demo(expert_a, expert_b)
+        demos = self.get_demo(expert_a, expert_b, is_train=False)
         obs_b, act_b = self.sess.run([self.fake_obs_b, self.fake_act_b],
                                      feed_dict=demos)
         show_trajectory(self.env_b, obs_b, act_b, demos[self.real_obs_a][0, :],
