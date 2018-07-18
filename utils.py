@@ -123,6 +123,23 @@ def show_trajectory(env, state, action, init_state=None, filename=None):
         plt.show()
 
 
+def trajectory_diff(obs1, obs2, filename=None):
+    figure = plt.figure(figsize=(8, 8))
+    ax = figure.add_subplot(221, projection='3d')
+    ax.plot(obs1[:, 0], obs1[:, 1], obs1[:, 2])
+    ax2 = figure.add_subplot(222, projection='3d')
+    ax2.plot(obs2[:, 0], obs2[:, 1], obs2[:, 2])
+    ax3 = figure.add_subplot(223)
+    ax3.plot(obs1[:, 0], obs1[:, 1])
+    ax4 = figure.add_subplot(224)
+    ax4.plot(obs2[:, 0], obs2[:, 1])
+    if filename is not None:
+        plt.savefig(filename)
+        plt.close()
+    else:
+        plt.show()
+
+
 def distribution_diff(state0, action0, state1, action1, state2, action2,
                       filename=None):
     figure = plt.figure(figsize=(8, 8))
