@@ -1,6 +1,6 @@
 libs/
 .idea/
-data/
+synthetic_data/
 __pycache__/
 logs/
 .ipynb_checkpoints/
