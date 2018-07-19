@@ -26,8 +26,9 @@ def relu_layer(name, n_in, n_out, inputs):
 
 class CycleGAIL(object):
     def __init__(self, name, sess, clip, env_a, env_b,
-                 a_act_dim, b_act_dim, a_obs_dim, b_obs_dim, hidden, lambda_g,
-                 lambda_f, gamma, use_orac_loss, loss_metric='L1',
+                 a_act_dim, b_act_dim, a_obs_dim, b_obs_dim,
+                 hidden_g, hidden_f, hidden_d,
+                 lambda_g, lambda_f, gamma, use_orac_loss, loss_metric='L1',
                  checkpoint_dir=None, spect=True, loss='wgan',
                  vis_mode='synthetic'):
         self.sess = sess
@@ -44,7 +45,9 @@ class CycleGAIL(object):
         self.a_obs_dim = a_obs_dim
         self.b_obs_dim = b_obs_dim
         self.use_spect = loss == 'wgan-sn'
-        self.hidden = hidden
+        self.hidden_f = hidden_f
+        self.hidden_g = hidden_g
+        self.hidden_d = hidden_d
         self.lambda_f = lambda_f
         self.lambda_g = lambda_g
         self.use_orac_loss = use_orac_loss
@@ -143,6 +146,7 @@ class CycleGAIL(object):
         self.params_d = self.params_d_a + self.params_d_b
         self.params_g = self.params_g_a + self.params_g_b
         self.params_f = self.params_f_a + self.params_f_b
+        self.saver = tf.train.Saver()
 
     def gen_net(self, prefix, inp, out_dim):
         pre_dim = int(inp.get_shape()[-1])
@@ -150,18 +154,22 @@ class CycleGAIL(object):
         #     return inp * np.array([[1, 1, 0.5]])
         # if prefix == 'f_b':
         #     return inp * np.array([[1, 1, 2.0]])
-        out = relu_layer(prefix + '.1', pre_dim, self.hidden, inp)
-        out = relu_layer(prefix + '.2', self.hidden, self.hidden, out)
-        out = relu_layer(prefix + '.3', self.hidden, self.hidden, out)
-        out = lib.ops.linear.Linear(prefix + '.4', self.hidden, out_dim, out)
+        if prefix[0] == 'f':
+            hidden = self.hidden_f
+        else:
+            hidden = self.hidden_g
+        out = relu_layer(prefix + '.1', pre_dim, hidden, inp)
+        out = relu_layer(prefix + '.2', hidden, hidden, out)
+        out = relu_layer(prefix + '.3', hidden, hidden, out)
+        out = lib.ops.linear.Linear(prefix + '.4', hidden, out_dim, out)
         return out
 
     def dis_net(self, prefix, inp):
         pre_dim = int(inp.get_shape()[-1])
-        out = relu_layer(prefix + '.1', pre_dim, 128, inp)
-        out = relu_layer(prefix + '.2', 128, 128, out)
-        out = relu_layer(prefix + '.3', 128, 128, out)
-        out = lib.ops.linear.Linear(prefix + '.4', 128, 1, out)
+        out = relu_layer(prefix + '.1', pre_dim, self.hidden_d, inp)
+        out = relu_layer(prefix + '.2', self.hidden_d, self.hidden_d, out)
+        out = relu_layer(prefix + '.3', self.hidden_d, self.hidden_d, out)
+        out = lib.ops.linear.Linear(prefix + '.4', self.hidden_d, 1, out)
         return out
 
     def clip_trainable_params(self, params):
@@ -185,7 +193,8 @@ class CycleGAIL(object):
         return demos
 
     # suppose have same horizon H
-    def train(self, args, expert_a, expert_b):
+    def train(self, args, expert_a, expert_b, eval_on=True,
+              ck_dir=None):
         # data: numpy, [N x n_x]
 
         print(self.loss)
@@ -245,7 +254,8 @@ class CycleGAIL(object):
         ls_fs = []
         wds = []
 
-        self.visual_evaluation(expert_a, expert_b, 0)
+        if eval_on:
+            self.visual_evaluation(expert_a, expert_b, 0)
 
         start_time = time.time()
         for epoch_idx in range(0, args.epoch):
@@ -277,11 +287,13 @@ class CycleGAIL(object):
                                     feed_dict=demos)
             ls_fs.append(ls_f)
 
-            if (epoch_idx + 1) % 100 == 0:
+            if (epoch_idx + 1) % 1000 == 0:
                 end_time = time.time()
-                if (epoch_idx + 1) % 1000 == 0:
+                if (epoch_idx + 1) % 1000 == 0 and eval_on:
                     self.visual_evaluation(expert_a, expert_b,
                                            (epoch_idx + 1) // 1000)
+                if ck_dir is not None:
+                    self.store(ck_dir, epoch_idx + 1)
                 print('Epoch %d (%.3f s), loss D = %.6f, loss G = %.6f,'
                       'loss F = %6f, w_dist = %.9f' %
                       (epoch_idx, end_time - start_time, float(np.mean(ls_ds)),
@@ -315,3 +327,29 @@ class CycleGAIL(object):
             save_trajectory_images(self.env_b, obs_b, act_b, prefix)
             save_video(prefix + '/real', 1000)
             save_video(prefix + '/imag', 1000)
+
+    def load(self, checkpoint_dir):
+        print(" [*] Reading checkpoint...")
+
+        model_dir = self.dir_name
+        checkpoint_dir = os.path.join(checkpoint_dir, model_dir)
+
+        ckpt = tf.train.get_checkpoint_state(checkpoint_dir)
+        if ckpt and ckpt.model_checkpoint_path:
+            ckpt_name = os.path.basename(ckpt.model_checkpoint_path)
+            self.saver.restore(self.sess, os.path.join(checkpoint_dir, ckpt_name))
+            return True
+        else:
+            return False
+
+    def store(self, checkpoint_dir, step):
+        model_name = "CycleGAIL"
+        model_dir = self.dir_name
+        checkpoint_dir = os.path.join(checkpoint_dir, model_dir)
+
+        if not os.path.exists(checkpoint_dir):
+            os.makedirs(checkpoint_dir)
+
+        self.saver.save(self.sess,
+                        os.path.join(checkpoint_dir, model_name),
+                        global_step=step)

@@ -9,8 +9,12 @@ from CycleGAIL import CycleGAIL
 
 parser = argparse.ArgumentParser(description='Argument parser')
 
-parser.add_argument('--nhid', dest='nhid', type=int, default=10,
-                    help='hidden size of the nn F,G')
+parser.add_argument('--nhidf', dest='nhidf', type=int, default=10,
+                    help='hidden size of the nn F')
+parser.add_argument('--nhidg', dest='nhidg', type=int, default=10,
+                    help='hidden size of the nn G')
+parser.add_argument('--nhidd', dest='nhidd', type=int, default=10,
+                    help='hidden size of the nn D')
 parser.add_argument('--lg', dest='lambda_g', type=float, default=20.,
                     help='lambda value G')
 parser.add_argument('--lf', dest='lambda_f', type=float, default=20.,
@@ -23,7 +27,8 @@ parser.add_argument('--enva', dest='enva', type=str,
                     default='HalfCheetah-v1', help='environment A name')
 parser.add_argument('--envb', dest='envb', type=str,
                     default='HalfCheetah-v1', help='environment B name')
-
+parser.add_argument("--ckdir", dest='ckdir', type=str,
+                    default='aaa', help='checkpoint direction')
 """Arguments related to run mode"""
 parser.add_argument('--mode', dest='mode', default='train',
                     help='gen, train, test')
@@ -72,7 +77,7 @@ if args.mode == 'train':
 
     with tf.Session() as sess:
         model = CycleGAIL(args.name, sess, args.clip, enva, envb,
-                          6, 6, 18, 18, args.nhid,
+                          6, 6, 18, 18, args.nhidf, args.nhidg, args.nhidd,
                           lambda_g=args.lambda_g,
                           lambda_f=args.lambda_f,
                           gamma=0.0,
@@ -82,13 +87,9 @@ if args.mode == 'train':
                           loss=args.loss,
                           vis_mode='mujoco')
         print('Training Process:')
-        model.train(args, demos_a, demos_b)
+        model.train(args, demos_a, demos_b, False)
 
 '''
 Recommended command:
-python run_mujoco.py --name logs/halfcheetah-ident --lr 0.0001 --nhid 30 --loss_metric L2 --epoch 100000 --ntraj 100 --lf 1.0 --lg 1.0 --loss wgan-gp --nd1 50 --nd2 50 --enva HalfCheetah-v1 --envb HalfCheetah-v1
-python run_synthetic.py --name logs/csyn-wgan-gp-128 --lr 0.0001 --clip 0.01 --nhid 128 --loss_metric L2 --epoch 100000 --ntraj 100 --gam 1.0 --lg 1.0 --lf 1.0 --loss wgan-gp
-python run_synthetic.py --name logs/csyn-wgan-gp-30 --lr 0.0001 --clip 0.01 --nhid 10 --loss_metric L2 --epoch 100000 --ntraj 100 --gam 1.0 --lg 1.0 --lf 1.0 --loss wgan-gp --nd1 25 --nd2 25
-python run_synthetic.py --name logs/csyn-wgan-gp-30 --lr 0.0001 --clip 0.01 --nhid 10 --loss_metric L2 --epoch 100000 --ntraj 100 --gam 0.0 --lg 1.0 --lf 1.0 --loss wgan-gp
-
+python run_mujoco.py --name logs/halfcheetah-ident --lr 0.0001 --nhidd 256 --nhidf 54 --nhidg 18 --loss_metric L2 --epoch 100000 --ntraj 100 --lf 1.0 --lg 1.0 --loss wgan-gp --nd1 50 --nd2 50 --enva HalfCheetah-v1 --envb HalfCheetah-v1 --ckdir model
 '''
