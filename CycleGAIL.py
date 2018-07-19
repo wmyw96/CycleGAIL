@@ -5,6 +5,7 @@ import numpy as np
 from utils import *
 from sn import spectral_normed_weight
 import warnings
+from mujoco_utils import *
 
 
 import tflib as lib
@@ -27,11 +28,13 @@ class CycleGAIL(object):
     def __init__(self, name, sess, clip, env_a, env_b,
                  a_act_dim, b_act_dim, a_obs_dim, b_obs_dim, hidden, lambda_g,
                  lambda_f, gamma, use_orac_loss, loss_metric='L1',
-                 checkpoint_dir=None, spect=True, loss='wgan'):
+                 checkpoint_dir=None, spect=True, loss='wgan',
+                 vis_mode='synthetic'):
         self.sess = sess
         self.clip = clip
         self.env_a = env_a
         self.env_b = env_b
+        self.vis_mode = vis_mode
 
         self.loss_metric = loss_metric
         self.checkpoint_dir = checkpoint_dir
@@ -181,24 +184,6 @@ class CycleGAIL(object):
                  self.real_act_b: act_b}
         return demos
 
-    def sample(self, init_obs, acts, env):
-        state_shape = [acts.shape[0]] + list(init_obs.shape)
-        state = np.zeros(state_shape)
-        state[0, :] = init_obs
-        env.reset(init_obs)
-        for i in range(acts.shape[0] - 1):
-            state[i + 1, :], _, _, _ = env.step(acts[i, :])
-        return state
-
-    def get_oracle(self, demos):
-        act_a, act_b = self.sess.run([self.fake_act_a, self.fake_act_b], demos)
-        # identity alignment
-        obs_a = self.sample(demos[self.real_obs_b][0, :], act_a, self.env_a)
-        obs_b = self.sample(demos[self.real_obs_a][0, :], act_b, self.env_b)
-        demos[self.orac_obs_a] = obs_a
-        demos[self.orac_obs_b] = obs_b
-        return demos
-
     # suppose have same horizon H
     def train(self, args, expert_a, expert_b):
         # data: numpy, [N x n_x]
@@ -250,7 +235,8 @@ class CycleGAIL(object):
         tf.summary.scalar('g loss', self.loss_g)
         tf.summary.scalar('f loss', self.loss_f)
         tf.summary.scalar('weierstrass distance', self.wdist)
-        tf.summary.scalar('oracle loss', self.loss_f_o)
+        if self.use_orac_loss:
+            tf.summary.scalar('oracle loss', self.loss_f_o)
         merged = tf.summary.merge_all()
         self.writer = tf.summary.FileWriter('./logs/' + self.dir_name,
                                             self.sess.graph)
@@ -258,6 +244,9 @@ class CycleGAIL(object):
         ls_gs = []
         ls_fs = []
         wds = []
+
+        self.visual_evaluation(expert_a, expert_b, 0)
+
         start_time = time.time()
         for epoch_idx in range(0, args.epoch):
             if epoch_idx % 500 == 0 or epoch_idx < 25:
@@ -267,7 +256,6 @@ class CycleGAIL(object):
 
             # add summary
             demos = self.get_demo(expert_a, expert_b)
-            demos = self.get_oracle(demos)
             summary = self.sess.run(merged, demos)
             self.writer.add_summary(summary, epoch_idx)
 
@@ -285,15 +273,15 @@ class CycleGAIL(object):
             ls_gs.append(ls_g)
             wds.append(wd)
             demos = self.get_demo(expert_a, expert_b)
-            demos = self.get_oracle(demos)
             ls_f, _ = self.sess.run([self.loss_f, self.f_opt],
                                     feed_dict=demos)
             ls_fs.append(ls_f)
 
             if (epoch_idx + 1) % 100 == 0:
                 end_time = time.time()
-                self.visual_evaluation(expert_a, expert_b,
-                                       (epoch_idx + 1) // 100)
+                if (epoch_idx + 1) % 1000 == 0:
+                    self.visual_evaluation(expert_a, expert_b,
+                                           (epoch_idx + 1) // 1000)
                 print('Epoch %d (%.3f s), loss D = %.6f, loss G = %.6f,'
                       'loss F = %6f, w_dist = %.9f' %
                       (epoch_idx, end_time - start_time, float(np.mean(ls_ds)),
@@ -310,9 +298,20 @@ class CycleGAIL(object):
         demos = self.get_demo(expert_a, expert_b, is_train=False)
         obs_b, act_b = self.sess.run([self.fake_obs_b, self.fake_act_b],
                                      feed_dict=demos)
-        show_trajectory(self.env_b, obs_b, act_b, demos[self.real_obs_a][0, :],
-                        self.dir_name + '/img/' + str(id) + 'a2b_T.jpg')
-        distribution_diff(demos[self.real_obs_a], demos[self.real_act_b],
-                          demos[self.real_obs_b], demos[self.real_act_b],
-                          obs_b, act_b,
-                          self.dir_name + '/img/' + str(id) + 'a2b_D.jpg')
+        if self.vis_mode == 'synthetic':
+            show_trajectory(self.env_b, obs_b, act_b,
+                            demos[self.real_obs_a][0, :],
+                            self.dir_name + '/img/' + str(id) + 'a2b_T.jpg')
+            distribution_diff(demos[self.real_obs_a], demos[self.real_act_b],
+                              demos[self.real_obs_b], demos[self.real_act_b],
+                              obs_b, act_b,
+                              self.dir_name + '/img/' + str(id) + 'a2b_D.jpg')
+        else:
+            prefix = self.dir_name + '/t' + str(id)
+            if os.path.isdir(prefix):
+                pass
+            else:
+                os.mkdir(prefix)
+            save_trajectory_images(self.env_b, obs_b, act_b, prefix)
+            save_video(prefix + '/real', 1000)
+            save_video(prefix + '/imag', 1000)
