@@ -87,7 +87,7 @@ if args.mode == 'train':
                           loss=args.loss,
                           vis_mode='mujoco')
         print('Training Process:')
-        model.train(args, demos_a, demos_b, False)
+        model.train(args, demos_a, demos_b, False, args.ckdir)
 
 '''
 Recommended command:
