@@ -27,7 +27,7 @@ def relu_layer(name, n_in, n_out, inputs):
 class CycleGAIL(object):
     def __init__(self, name, sess, clip, env_a, env_b,
                  a_act_dim, b_act_dim, a_obs_dim, b_obs_dim,
-                 hidden_g, hidden_f, hidden_d,
+                 hidden_f, hidden_g, hidden_d,
                  lambda_g, lambda_f, gamma, use_orac_loss, loss_metric='L1',
                  checkpoint_dir=None, spect=True, loss='wgan',
                  vis_mode='synthetic'):
@@ -56,9 +56,10 @@ class CycleGAIL(object):
         print('======= Settings =======')
         print('-------- Models --------')
         print('GAN: %s\nclip: %.3f\nG lambda %.3f\nF lambda %.3f\n'
-              'Loss metric: %s\nUse oloss: %s\nGamma: %.3f\nHidden size: %d\n'
+              'Loss metric: %s\nUse oloss: %s\nGamma: %.3f\nF Hidden size: '
+              '%d\nG Hidden size: %d\nD Hidden size: %d'
               % (loss, clip, lambda_g, lambda_f, loss_metric,
-                 str(use_orac_loss), gamma, hidden))
+                 str(use_orac_loss), gamma, hidden_f, hidden_g, hidden_d))
         print('----- Environments -----')
         print('Domain A Obs: %d\nDomain A Act: %d\nDomain B Obs: %d\n'
               'Domain B Act: %d\n'
