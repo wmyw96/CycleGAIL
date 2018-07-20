@@ -329,6 +329,12 @@ class CycleGAIL(object):
             save_video(prefix + '/real', 1000)
             save_video(prefix + '/imag', 1000)
 
+    def evaluation(self, expert_a, expert_b, checkpoint_dir):
+        if self.load(checkpoint_dir):
+            self.visual_evaluation(expert_a, expert_b, 111)
+        else:
+            raise ValueError("Cannot load models")
+
     def load(self, checkpoint_dir):
         print(" [*] Reading checkpoint...")
 

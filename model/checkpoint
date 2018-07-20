@@ -1,6 +1,0 @@
-model_checkpoint_path: "CycleGAIL-200000"
-all_model_checkpoint_paths: "CycleGAIL-196000"
-all_model_checkpoint_paths: "CycleGAIL-197000"
-all_model_checkpoint_paths: "CycleGAIL-198000"
-all_model_checkpoint_paths: "CycleGAIL-199000"
-all_model_checkpoint_paths: "CycleGAIL-200000"

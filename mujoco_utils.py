@@ -68,11 +68,11 @@ def save_video(file_prefix, num_items):
 if __name__ == '__main__':
     np.random.seed(1234)
     demos = Demonstrations(1, 34, 23, 1000000007)
-    demos.load('data/Walker2d-v1', 100)
+    demos.load('data/HalfCheetah-v1-3', 100)
     demos.set(50)
     obss, acts = demos.next_demo()
     #obss, acts = demos.next_demo()
-    env = gym.make("Walker2d-v1")
+    env = gym.make("HalfCheetah-v1")
     show_trajectory(env, obss, acts, True)
     #save_trajectory_images('HalfCheetah-v1/t1', env, obss, acts)
     #save_video('HalfCheetah-v1/t1/real', 1000)
