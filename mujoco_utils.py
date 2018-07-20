@@ -18,10 +18,11 @@ def show_trajectory(env, obs, acts, animate=False):
     err = 0.0
     reward_sum = 0.0
     for i in range(horizon):
-        #clip = np.concatenate([obs[i, 1:qpos_dim],
-        #                  np.clip(obs[i, qpos_dim:], -10, 10)])
+        clip = np.concatenate([obs[i, 1:qpos_dim],
+                          np.clip(obs[i, qpos_dim:], -10, 10)])
         clip = obs[i, 1:]
         err += np.sum((state - clip) * (state - clip))
+        print(np.sum((state - clip) * (state - clip)))
         if animate:
             env.render()
         nxt_state, rd, __, ___ = env.step(acts[i])
@@ -65,12 +66,13 @@ def save_video(file_prefix, num_items):
 
 
 if __name__ == '__main__':
+    np.random.seed(1234)
     demos = Demonstrations(1, 34, 23, 1000000007)
-    demos.load('data/HalfCheetah-v1', 100)
+    demos.load('data/Walker2d-v1', 100)
     demos.set(50)
     obss, acts = demos.next_demo()
     #obss, acts = demos.next_demo()
-    env = gym.make("HalfCheetah-v1")
-    #show_trajectory(env, obss, acts, True)
+    env = gym.make("Walker2d-v1")
+    show_trajectory(env, obss, acts, True)
     #save_trajectory_images('HalfCheetah-v1/t1', env, obss, acts)
-    save_video('HalfCheetah-v1/t1/real', 1000)
+    #save_video('HalfCheetah-v1/t1/real', 1000)
