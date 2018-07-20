@@ -83,8 +83,6 @@ class CycleGAIL(object):
         self.real_act_b = tf.placeholder(tf.float32, [None, self.b_act_dim])
         self.real_obs_a = tf.placeholder(tf.float32, [None, self.a_obs_dim])
         self.real_obs_b = tf.placeholder(tf.float32, [None, self.b_obs_dim])
-        self.orac_obs_a = tf.placeholder(tf.float32, [None, self.a_obs_dim])
-        self.orac_obs_b = tf.placeholder(tf.float32, [None, self.b_obs_dim])
 
         self.fake_act_a = self.gen_net('g_a', self.real_act_b, self.a_act_dim)
         self.fake_act_b = self.gen_net('g_b', self.real_act_a, self.b_act_dim)
@@ -104,11 +102,6 @@ class CycleGAIL(object):
             cycle_loss(self.real_obs_a, self.inv_obs_a, self.loss_metric)
         self.cycle_obs_b = \
             cycle_loss(self.real_obs_b, self.inv_obs_b, self.loss_metric)
-
-        self.orac_loss_a = \
-            cycle_loss(self.fake_obs_a, self.orac_obs_a, self.loss_metric)
-        self.orac_loss_b = \
-            cycle_loss(self.fake_obs_b, self.orac_obs_b, self.loss_metric)
 
         self.real_a = tf.concat([self.real_obs_a, self.real_act_a], 1)
         self.fake_a = tf.concat([self.fake_obs_a, self.fake_act_a], 1)
@@ -134,9 +127,6 @@ class CycleGAIL(object):
             self.lambda_g * (self.cycle_act_a + self.cycle_act_b)
         self.loss_f = self.loss_gf_a + self.loss_gf_b + \
             self.lambda_f * (self.cycle_obs_a + self.cycle_obs_b)
-        if self.use_orac_loss:
-            self.loss_f_o = self.gamma * (self.orac_loss_a + self.orac_loss_b)
-            self.loss_f += self.loss_f_o
 
         self.params_g_a = lib.params_with_name('g_a')
         self.params_g_b = lib.params_with_name('g_b')
@@ -247,8 +237,7 @@ class CycleGAIL(object):
         tf.summary.scalar('g loss', self.loss_g)
         tf.summary.scalar('f loss', self.loss_f)
         tf.summary.scalar('weierstrass distance', self.wdist)
-        if self.use_orac_loss:
-            tf.summary.scalar('oracle loss', self.loss_f_o)
+
         merged = tf.summary.merge_all()
         self.writer = tf.summary.FileWriter('./logs/' + self.dir_name,
                                             self.sess.graph)
@@ -290,11 +279,11 @@ class CycleGAIL(object):
                                     feed_dict=demos)
             ls_fs.append(ls_f)
 
-            if (epoch_idx + 1) % 1000 == 0:
+            if (epoch_idx + 1) % 100 == 0:
                 end_time = time.time()
-                if (epoch_idx + 1) % 1000 == 0 and eval_on:
+                if (epoch_idx + 1) % 100 == 0 and eval_on:
                     self.visual_evaluation(expert_a, expert_b,
-                                           (epoch_idx + 1) // 1000)
+                                           (epoch_idx + 1) // 100)
                 if ck_dir is not None:
                     self.store(ck_dir, epoch_idx + 1)
                 print('Epoch %d (%.3f s), loss D = %.6f, loss G = %.6f,'

@@ -60,66 +60,40 @@ tf.set_random_seed(1234)
 
 args = parser.parse_args()
 
-if args.mode == 'train':
-    demos_a = Demonstrations(1, 34, 23, 1000000007)
-    demos_b = Demonstrations(1, 23, 34, 1000000009)
-    print('Training Init')
-    print('Load data : Expert #1 Demonstrations')
-    demos_a.load('data/' + args.enva, args.ntraj)
-    print('Load data : Expert #2 Demonstrations')
-    demos_b.load('data/' + args.envb, args.ntraj)
-    demos_a.set(args.nd1)
-    demos_b.set(args.nd2)
-    try:
-        enva = gym.make(args.enva)
-        envb = gym.make(args.envb)
-    except:
-        print('Unable to load environment!')
-        enva = envb = None
-    print('Load data finished !')
-
-    with tf.Session() as sess:
-        model = CycleGAIL(args.name, sess, args.clip, enva, envb,
-                          6, 6, 18, 18, args.nhidf, args.nhidg, args.nhidd,
-                          lambda_g=args.lambda_g,
-                          lambda_f=args.lambda_f,
-                          gamma=0.0,
-                          use_orac_loss=False,
-                          loss_metric=args.loss_metric,
-                          checkpoint_dir=None,
-                          loss=args.loss,
-                          vis_mode='mujoco')
-        print('Training Process:')
-        model.train(args, demos_a, demos_b, False, args.ckdir)
-
-if args.mode == 'test':
-    demos_a = Demonstrations(1, 34, 23, 1000000007)
-    demos_b = Demonstrations(1, 23, 34, 1000000009)
-    print('Training Init')
-    print('Load data : Expert #1 Demonstrations')
-    demos_a.load('data/' + args.enva, args.ntraj)
-    print('Load data : Expert #2 Demonstrations')
-    demos_b.load('data/' + args.envb, args.ntraj)
-    demos_a.set(args.nd1)
-    demos_b.set(args.nd2)
-
+demos_a = Demonstrations(1, 34, 23, 1000000007)
+demos_b = Demonstrations(1, 23, 34, 1000000009)
+print('Init')
+print('Load data : Expert #1 Demonstrations')
+demos_a.load('data/' + args.enva, args.ntraj)
+print('Load data : Expert #2 Demonstrations')
+demos_b.load('data/' + args.envb, args.ntraj)
+demos_a.set(args.nd1)
+demos_b.set(args.nd2)
+try:
     enva = gym.make(args.enva)
     envb = gym.make(args.envb)
-    print('Load data finished !')
+except:
+    print('Unable to load environment!')
+    enva = envb = None
+print('Load data finished !')
 
-    with tf.Session() as sess:
-        model = CycleGAIL(args.name, sess, args.clip, enva, envb,
-                          6, 6, 18, 18, args.nhidf, args.nhidg, args.nhidd,
-                          lambda_g=args.lambda_g,
-                          lambda_f=args.lambda_f,
-                          gamma=0.0,
-                          use_orac_loss=False,
-                          loss_metric=args.loss_metric,
-                          checkpoint_dir=None,
-                          loss=args.loss,
-                          vis_mode='mujoco')
-        print('Training Process:')
+with tf.Session() as sess:
+    model = CycleGAIL(args.name, sess, args.clip, enva, envb,
+                      6, 6, 18, 18, args.nhidf, args.nhidg, args.nhidd,
+                      lambda_g=args.lambda_g,
+                      lambda_f=args.lambda_f,
+                      gamma=0.0,
+                      use_orac_loss=False,
+                      loss_metric=args.loss_metric,
+                      checkpoint_dir=None,
+                      loss=args.loss,
+                      vis_mode='mujoco')
+    print('Training Process:')
+    if args.mode == 'train':
+        model.train(args, demos_a, demos_b, False, args.ckdir)
+    else:
         model.evaluation(demos_a, demos_b, args.ckdir)
+
 
 '''
 Recommended command:

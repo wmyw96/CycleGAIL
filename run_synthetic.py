@@ -105,7 +105,7 @@ if args.mode == 'train':
 
     with tf.Session() as sess:
         model = CycleGAIL(args.name, sess, args.clip, enva, envb,
-                          3, 3, 3, 3, args.nhid,
+                          3, 3, 3, 3, args.nhid, args.nhid, 128,
                           lambda_g=args.lambda_g,
                           lambda_f=args.lambda_f,
                           gamma=args.gamma,

@@ -9,7 +9,7 @@ except:
 import cv2
 
 
-def show_trajectory(env, obs, acts, animate=False):
+def show_animate_trajectory(env, obs, acts, animate=False):
     env.reset()
     qpos_dim = env.env.model.nq
     qvel_dim = env.env.model.nv
@@ -76,6 +76,6 @@ if __name__ == '__main__':
     obss, acts = demos.next_demo()
     #obss, acts = demos.next_demo()
     env = gym.make("HalfCheetah-v1")
-    show_trajectory(env, obss, acts, True)
+    show_animate_trajectory(env, obss, acts, True)
     #save_trajectory_images('HalfCheetah-v1/t1', env, obss, acts)
     #save_video('HalfCheetah-v1/t1/real', 1000)
