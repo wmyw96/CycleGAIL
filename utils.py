@@ -1,5 +1,8 @@
 import numpy as np
-import matplotlib.pyplot as plt
+try:
+    import matplotlib.pyplot as plt
+except:
+    print('Cannot import matplotlib')
 from mpl_toolkits.mplot3d import Axes3D
 import tensorflow as tf
 import warnings

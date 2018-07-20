@@ -1,8 +1,11 @@
 import gym
 import numpy as np
 from dataset import Demonstrations
-import matplotlib.pyplot as plt
-import matplotlib
+try:
+    import matplotlib.pyplot as plt
+    import matplotlib
+except:
+    print('Cannot import matplotlib')
 import cv2
 
 
