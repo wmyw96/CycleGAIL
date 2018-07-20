@@ -120,6 +120,11 @@ if args.mode == 'test':
 
 '''
 Recommended command:
-python run_mujoco.py --name logs/halfcheetah-ident --lr 0.0001 --nhidd 256 --nhidf 54 --nhidg 18 --loss_metric L2 --epoch 100000 --ntraj 100 --lf 1.0 --lg 1.0 --loss wgan-gp --nd1 50 --nd2 50 --enva HalfCheetah-v1 --envb HalfCheetah-v1 --ckdir model --mode test
+CUDA_VISIBLE_DEVICES=6 python run_mujoco.py --name logs/halfcheetah-ident --lr 0.0001 --nhidd 256 --nhidf 54 --nhidg 18 --loss_metric L2 --epoch 100000 --ntraj 100 --lf 1.0 --lg 1.0 --loss wgan-gp --nd1 50 --nd2 50 --enva HalfCheetah-v1 --envb HalfCheetah-v1 --ckdir model --mode test
 python run_mujoco.py --name logs/halfcheetah-ident --lr 0.0001 --nhidd 256 --nhidf 54 --nhidg 18 --loss_metric L2 --epoch 100000 --ntraj 100 --lf 1.0 --lg 1.0 --loss wgan-gp --nd1 50 --nd2 50 --enva HalfCheetah-v1 --envb HalfCheetah-v1 --ckdir model
+
+CUDA_VISIBLE_DEVICES=6 python run_mujoco.py --name logs/halfcheetah-ident --lr 0.0001 --nhidd 256 --nhidf 54 --nhidg 18 --loss_metric L2 --epoch 200000 --ntraj 100 --lf 0 --lg 0 --loss wgan-gp --nd1 50 --nd2 50 --enva HalfCheetah-v1 --envb HalfCheetah-v1 --ckdir model --mode train
+CUDA_VISIBLE_DEVICES=5 python run_mujoco.py --name logs/halfcheetah-ident --lr 0.0001 --nhidd 256 --nhidf 54 --nhidg 18 --loss_metric L2 --epoch 200000 --ntraj 100 --lf 1.0 --lg 1.0 --loss wgan-gp --nd1 50 --nd2 50 --enva HalfCheetah-v1 --envb HalfCheetah-v1 --ckdir model2 --mode train
+
+
 '''
