@@ -126,7 +126,7 @@ class CycleGAIL(object):
         if self.loss == 'wgan-gp':
             self.gp = self.graident_penalty('d_a', self.real_a, self.fake_a)
             self.gp += self.graident_penalty('d_b', self.real_b, self.fake_b)
-            self.loss_d += self.gp
+            self.loss_d += self.gp * 20
         self.loss_gf_a = -tf.reduce_mean(self.d_fake_a)
         self.loss_gf_b = -tf.reduce_mean(self.d_fake_b)
 
@@ -151,6 +151,8 @@ class CycleGAIL(object):
 
     def gen_net(self, prefix, inp, out_dim):
         pre_dim = int(inp.get_shape()[-1])
+        #if prefix[0] == 'f':
+        #    return inp
         # if prefix == 'f_a':
         #     return inp * np.array([[1, 1, 0.5]])
         # if prefix == 'f_b':

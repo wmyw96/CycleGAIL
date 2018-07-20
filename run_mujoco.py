@@ -70,9 +70,12 @@ if args.mode == 'train':
     demos_b.load('data/' + args.envb, args.ntraj)
     demos_a.set(args.nd1)
     demos_b.set(args.nd2)
-
-    enva = gym.make(args.enva)
-    envb = gym.make(args.envb)
+    try:
+        enva = gym.make(args.enva)
+        envb = gym.make(args.envb)
+    except:
+        print('Unable to load environment!')
+        enva = envb = None
     print('Load data finished !')
 
     with tf.Session() as sess:
