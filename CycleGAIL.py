@@ -69,7 +69,7 @@ class CycleGAIL(object):
         self.build_model()
         print('CycleGAIL: Build graph finished !')
 
-    def graident_penalty(self, name, real, fake):
+    def gradient_penalty(self, name, real, fake):
         alpha = tf.random_uniform([tf.shape(real)[0], 1], 0., 1.)
         hat = alpha * real + ((1 - alpha) * fake)
         critic_hat_a = self.dis_net(name, hat)
@@ -77,6 +77,15 @@ class CycleGAIL(object):
         slopes = tf.sqrt(tf.reduce_sum(tf.square(gradients),
                                        reduction_indices=[1]))
         return tf.reduce_mean((slopes - 1) ** 2)
+
+    def gradient_penalty_gen(self, real, fake):
+        grad_norm_sq2 = 0.0
+        for i in range(fake.shape[1]):
+            cur_grad = tf.gradients(fake[:, i], [real])[0]
+            grad_norm_sq2 += tf.reduce_sum(tf.square(cur_grad),
+                                           reduction_indices=[1])
+        grad_norm = tf.sqrt(grad_norm_sq2)
+        return tf.reduce_mean((grad_norm - 1) ** 2)
 
     def build_model(self):
         self.real_act_a = tf.placeholder(tf.float32, [None, self.a_act_dim])
@@ -117,16 +126,20 @@ class CycleGAIL(object):
         self.wdist = self.wdist_a + self.wdist_b
         self.loss_d = - self.wdist_a - self.wdist_b
         if self.loss == 'wgan-gp':
-            self.gp = self.graident_penalty('d_a', self.real_a, self.fake_a)
-            self.gp += self.graident_penalty('d_b', self.real_b, self.fake_b)
+            self.gp = self.gradient_penalty('d_a', self.real_a, self.fake_a)
+            self.gp += self.gradient_penalty('d_b', self.real_b, self.fake_b)
             self.loss_d += self.gp * 10
         self.loss_gf_a = -tf.reduce_mean(self.d_fake_a)
         self.loss_gf_b = -tf.reduce_mean(self.d_fake_b)
 
         self.loss_g = self.loss_gf_a + self.loss_gf_b + \
-            self.lambda_g * (self.cycle_act_a + self.cycle_act_b)
+            self.lambda_g * (self.cycle_act_a + self.cycle_act_b) + \
+            self.gradient_penalty_gen(self.real_act_a, self.fake_act_b) + \
+            self.gradient_penalty_gen(self.real_act_b, self.fake_act_a)
         self.loss_f = self.loss_gf_a + self.loss_gf_b + \
-            self.lambda_f * (self.cycle_obs_a + self.cycle_obs_b)
+            self.lambda_f * (self.cycle_obs_a + self.cycle_obs_b) + \
+            self.gradient_penalty_gen(self.real_obs_a, self.fake_obs_b) + \
+            self.gradient_penalty_gen(self.real_obs_b, self.fake_obs_a)
 
         self.params_g_a = lib.params_with_name('g_a')
         self.params_g_b = lib.params_with_name('g_b')
@@ -316,16 +329,19 @@ class CycleGAIL(object):
                 pass
             else:
                 os.mkdir(prefix)
-            save_trajectory_images(self.env_b, obs_b, act_b, prefix)
-            save_video(prefix + '/real', obs_b.shape[0])
-            save_video(prefix + '/imag', obs_b.shape[0])
+            #save_trajectory_images(self.env_b, obs_b, act_b, prefix)
+            #save_video(prefix + '/real', obs_b.shape[0])
+            #save_video(prefix + '/imag', obs_b.shape[0])
+            distribution_pdiff(demos[self.real_obs_a], demos[self.real_act_a],
+                               demos[self.real_obs_b], demos[self.real_act_b],
+                               obs_b, act_b, prefix + '/dist')
 
     def evaluation(self, expert_a, expert_b, checkpoint_dir):
         if self.load(checkpoint_dir):
             demos = self.get_demo(expert_a, expert_b, is_train=False)
             horizon = demos[self.real_obs_a].shape[0]
 
-            path_gta = self.dir_name + '/ground_truth_a'
+            '''path_gta = self.dir_name + '/ground_truth_a'
             generate_dir(path_gta)
             save_trajectory_images(self.env_a, demos[self.real_obs_a],
                                    demos[self.real_act_a], path_gta)
@@ -335,7 +351,7 @@ class CycleGAIL(object):
             generate_dir(path_gtb)
             save_trajectory_images(self.env_a, demos[self.real_obs_a],
                                    demos[self.real_act_a], path_gtb)
-            save_video(self.dir_name + '/ground_truth_b/real', horizon)
+            save_video(self.dir_name + '/ground_truth_b/real', horizon)'''
             self.visual_evaluation(expert_a, expert_b, 111)
             wds = []
             for i in range(50):

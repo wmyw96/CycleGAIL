@@ -6,4 +6,6 @@ logs/
 .ipynb_checkpoints/
 *.pyc
 models/
+model/
+results/
 

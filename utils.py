@@ -175,3 +175,35 @@ def generate_dir(prefix):
         pass
     else:
         os.mkdir(prefix)
+
+
+def distribution_pdiff(state0, action0, state1, action1, state2, action2,
+                       dir_name):
+    generate_dir(dir_name)
+    for i in range(state0.shape[1]):
+        for j in range(action0.shape[1]):
+            fig = plt.figure(figsize=(8, 8))
+            ax = fig.add_subplot(111)
+            ax.scatter(state0[:, i], action0[:, j], color='b', s=0.5)
+            ax.scatter(state1[:, i], action1[:, j], color='r', s=0.5)
+            ax.scatter(state2[:, i], action2[:, j], color='y', s=0.5)
+            plt.savefig(dir_name + '/s%da%d' % (i, j))
+            plt.close()
+    for i in range(state0.shape[1]):
+        for j in range(state0.shape[1]):
+            fig = plt.figure(figsize=(8, 8))
+            ax = fig.add_subplot(111)
+            ax.scatter(state0[:, i], state0[:, j], color='b', s=0.5)
+            ax.scatter(state1[:, i], state1[:, j], color='r', s=0.5)
+            ax.scatter(state2[:, i], state2[:, j], color='y', s=0.5)
+            plt.savefig(dir_name + '/s%ds%d' % (i, j))
+            plt.close()
+    for i in range(action0.shape[1]):
+        for j in range(action0.shape[1]):
+            fig = plt.figure(figsize=(8, 8))
+            ax = fig.add_subplot(111)
+            ax.scatter(action0[:, i], action0[:, j], color='b', s=0.5)
+            ax.scatter(action1[:, i], action1[:, j], color='r', s=0.5)
+            ax.scatter(action2[:, i], action2[:, j], color='y', s=0.5)
+            plt.savefig(dir_name + '/a%da%d' % (i, j))
+            plt.close()
