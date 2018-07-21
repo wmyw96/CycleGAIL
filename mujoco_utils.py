@@ -20,7 +20,7 @@ def show_animate_trajectory(env, obs, acts, animate=False):
     state = obs[0, 1:]
     err = 0.0
     reward_sum = 0.0
-    for i in range(horizon):
+    for i in range(100):
         clip = np.concatenate([obs[i, 1:qpos_dim],
                           np.clip(obs[i, qpos_dim:], -10, 10)])
         clip = obs[i, 1:]
@@ -43,6 +43,8 @@ def save_trajectory_images(env, obs, acts, file_path):
     qvel = obs[0, qpos_dim:]
     env.env.set_state(qpos, qvel)
     horizon = obs.shape[0]
+    print('Save Trajectory Images in \"%s\": %d timesteps' % (
+        file_path, horizon))
     for i in range(horizon):
         img = env.render(mode='rgb_array')
         matplotlib.image.imsave(file_path + '/real%d.jpg' % i,
@@ -59,6 +61,7 @@ def save_trajectory_images(env, obs, acts, file_path):
 
 
 def save_video(file_prefix, num_items):
+    print('Save Trajectory Video as \"%s\"' % (file_prefix + '.avi'))
     fps = 24  # frequency
     fourcc = cv2.VideoWriter_fourcc(*'MJPG')
     video_writer = cv2.VideoWriter(file_prefix + '.avi', fourcc, fps, (500,500))
@@ -71,7 +74,7 @@ def save_video(file_prefix, num_items):
 if __name__ == '__main__':
     np.random.seed(1234)
     demos = Demonstrations(1, 34, 23, 1000000007)
-    demos.load('data/HalfCheetah-v1-3', 100)
+    demos.load('data/HalfCheetah-v1', 100)
     demos.set(50)
     obss, acts = demos.next_demo()
     #obss, acts = demos.next_demo()

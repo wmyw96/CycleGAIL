@@ -119,7 +119,7 @@ class CycleGAIL(object):
         if self.loss == 'wgan-gp':
             self.gp = self.graident_penalty('d_a', self.real_a, self.fake_a)
             self.gp += self.graident_penalty('d_b', self.real_b, self.fake_b)
-            self.loss_d += self.gp * 20
+            self.loss_d += self.gp * 1
         self.loss_gf_a = -tf.reduce_mean(self.d_fake_a)
         self.loss_gf_b = -tf.reduce_mean(self.d_fake_b)
 
@@ -317,12 +317,31 @@ class CycleGAIL(object):
             else:
                 os.mkdir(prefix)
             save_trajectory_images(self.env_b, obs_b, act_b, prefix)
-            save_video(prefix + '/real', 1000)
-            save_video(prefix + '/imag', 1000)
+            save_video(prefix + '/real', obs_b.shape[0])
+            save_video(prefix + '/imag', obs_b.shape[0])
 
     def evaluation(self, expert_a, expert_b, checkpoint_dir):
         if self.load(checkpoint_dir):
+            demos = self.get_demo(expert_a, expert_b, is_train=False)
+            horizon = demos[self.real_obs_a].shape[0]
+
+            path_gta = self.dir_name + '/ground_truth_a'
+            generate_dir(path_gta)
+            save_trajectory_images(self.env_a, demos[self.real_obs_a],
+                                   demos[self.real_act_a], path_gta)
+            save_video(self.dir_name + '/ground_truth_a/real', horizon)
+
+            path_gtb = self.dir_name + '/ground_truth_b'
+            generate_dir(path_gtb)
+            save_trajectory_images(self.env_a, demos[self.real_obs_a],
+                                   demos[self.real_act_a], path_gtb)
+            save_video(self.dir_name + '/ground_truth_b/real', horizon)
             self.visual_evaluation(expert_a, expert_b, 111)
+            wds = []
+            for i in range(50):
+                demos = self.get_demo(expert_a, expert_b, is_train=False)
+                wds.append(self.sess.run(self.wdist, feed_dict=demos))
+            print('Test w_dist = %.5f\n' % float(np.mean(wds)))
         else:
             raise ValueError("Cannot load models")
 

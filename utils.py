@@ -7,6 +7,7 @@ from mpl_toolkits.mplot3d import Axes3D
 import tensorflow as tf
 import warnings
 from sn import spectral_normed_weight
+import os
 
 
 def lrelu(x, alpha=0.2):
@@ -167,3 +168,10 @@ def distribution_diff(state0, action0, state1, action1, state2, action2,
         plt.close()
     else:
         plt.show()
+
+
+def generate_dir(prefix):
+    if os.path.isdir(prefix):
+        pass
+    else:
+        os.mkdir(prefix)
