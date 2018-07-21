@@ -114,7 +114,7 @@ if args.mode == 'train':
                           checkpoint_dir=None,
                           loss=args.loss)
         print('Training Process:')
-        model.train(args, demos_a, demos_b)
+        model.train(args, demos_a, demos_b, False)
 
 '''
 Recommended command:
