@@ -19,6 +19,8 @@ parser.add_argument('--lg', dest='lambda_g', type=float, default=20.,
                     help='lambda value G')
 parser.add_argument('--lf', dest='lambda_f', type=float, default=20.,
                     help='lambda value F')
+parser.add_argument('--gamma', dest='gamma', type=float, default=20.,
+                    help='gamma value')
 parser.add_argument('--name', dest='name', type=str,
                     default='CycleGAIL', help='model name')
 parser.add_argument('--loss', dest='loss', type=str, default='wgan',
@@ -82,7 +84,7 @@ with tf.Session() as sess:
                       6, 6, 18, 18, args.nhidf, args.nhidg, args.nhidd,
                       lambda_g=args.lambda_g,
                       lambda_f=args.lambda_f,
-                      gamma=0.0,
+                      gamma=args.gamma,
                       use_orac_loss=False,
                       loss_metric=args.loss_metric,
                       checkpoint_dir=None,

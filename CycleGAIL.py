@@ -100,6 +100,8 @@ class CycleGAIL(object):
         self.real_act_b = tf.placeholder(tf.float32, [None, self.b_act_dim])
         self.real_obs_a = tf.placeholder(tf.float32, [None, self.a_obs_dim])
         self.real_obs_b = tf.placeholder(tf.float32, [None, self.b_obs_dim])
+        self.orac_obs_a = tf.placeholder(tf.float32, [None, self.a_obs_dim])
+        self.orac_obs_b = tf.placeholder(tf.float32, [None, self.b_obs_dim])
 
         self.fake_act_a = self.gen_net('g_a', self.real_act_b, self.a_act_dim)
         self.fake_act_b = self.gen_net('g_b', self.real_act_a, self.b_act_dim)
@@ -141,13 +143,13 @@ class CycleGAIL(object):
         self.loss_gf_b = -tf.reduce_mean(self.d_fake_b)
 
         self.loss_g = self.loss_gf_a + self.loss_gf_b + \
-            self.lambda_g * (self.cycle_act_a + self.cycle_act_b) + \
-            self.gradient_penalty_gen(self.real_act_a, self.fake_act_b) + \
-            self.gradient_penalty_gen(self.real_act_b, self.fake_act_a)
+            self.lambda_g * (self.cycle_act_a + self.cycle_act_b)
         self.loss_f = self.loss_gf_a + self.loss_gf_b + \
-            self.lambda_f * (self.cycle_obs_a + self.cycle_obs_b) + \
-            self.gradient_penalty_gen(self.real_obs_a, self.fake_obs_b) + \
-            self.gradient_penalty_gen(self.real_obs_b, self.fake_obs_a)
+            self.lambda_f * (self.cycle_obs_a + self.cycle_obs_b)
+
+        self.loss_f += self.gamma * \
+            (cycle_loss(self.fake_obs_a, self.orac_obs_a, self.loss_metric) +
+             cycle_loss(self.fake_obs_b, self.orac_obs_b, self.loss_metric))
 
         self.params_g_a = lib.params_with_name('g_a')
         self.params_g_b = lib.params_with_name('g_b')
@@ -204,6 +206,38 @@ class CycleGAIL(object):
                  self.real_act_a: act_a,
                  self.real_obs_b: obs_b,
                  self.real_act_b: act_b}
+        return demos
+
+    def local_oracle(self, sobs, sact, tobs_gen, tact_gen, tenv, demos):
+        horizon = sobs.shape[0]
+        obs_dim = tobs_gen.get_shape()[1]
+        obs_orac = np.zeros((horizon, obs_dim))
+        tobs = self.sess.run(tobs_gen, feed_dict=demos)
+        tact = self.sess.run(tact_gen, feed_dict=demos)
+        tenv.reset()
+        tenv.env.set_state(tobs[0, :9], tobs[0, 9:])
+        for i in range(horizon - 1):
+            #tenv.reset()
+            #tenv.env.set_state(tobs[i, :9], tobs[i, 9:])
+            tenv.step(tact[i])
+            nxt_obs = \
+                np.concatenate([tenv.env.model.data.qpos,
+                                tenv.env.model.data.qvel]).reshape(-1)
+            obs_orac[i + 1, :] = nxt_obs
+        obs_orac[0, :] = tobs[0, :]
+        return obs_orac
+
+    def get_oracle(self, demos):
+        act_a = demos[self.real_act_a]
+        obs_a = demos[self.real_obs_a]
+        act_b = demos[self.real_act_b]
+        obs_b = demos[self.real_obs_b]
+        demos[self.orac_obs_a] = \
+            self.local_oracle(obs_b, act_b, self.fake_obs_a, self.fake_act_a,
+                              self.env_a, demos)
+        demos[self.orac_obs_b] = \
+            self.local_oracle(obs_a, act_a, self.fake_obs_b, self.fake_act_b,
+                              self.env_b, demos)
         return demos
 
     # suppose have same horizon H
@@ -279,6 +313,7 @@ class CycleGAIL(object):
 
             # add summary
             demos = self.get_demo(expert_a, expert_b)
+            demos = self.get_oracle(demos)
             summary = self.sess.run(merged, demos)
             self.writer.add_summary(summary, epoch_idx)
 
@@ -296,6 +331,7 @@ class CycleGAIL(object):
             ls_gs.append(ls_g)
             wds.append(wd)
             demos = self.get_demo(expert_a, expert_b)
+            demos = self.get_oracle(demos)
             ls_f, _ = self.sess.run([self.loss_f, self.f_opt],
                                     feed_dict=demos)
             ls_fs.append(ls_f)
@@ -349,6 +385,7 @@ class CycleGAIL(object):
             demos = self.get_demo(expert_a, expert_b, is_train=False)
             horizon = demos[self.real_obs_a].shape[0]
 
+            print(horizon)
             path_gta = self.dir_name + '/ground_truth_a'
             generate_dir(path_gta)
             save_trajectory_images(self.env_a, demos[self.real_obs_a],
