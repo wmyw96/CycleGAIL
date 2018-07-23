@@ -30,7 +30,7 @@ class CycleGAIL(object):
                  hidden_f, hidden_g, hidden_d,
                  lambda_g, lambda_f, gamma, use_orac_loss, loss_metric='L1',
                  checkpoint_dir=None, spect=True, loss='wgan',
-                 vis_mode='synthetic'):
+                 vis_mode='synthetic', use_markov_concat=True):
         self.sess = sess
         self.clip = clip
         self.env_a = env_a
@@ -53,6 +53,7 @@ class CycleGAIL(object):
         self.use_orac_loss = use_orac_loss
         self.loss = loss
         self.gamma = gamma
+        self.use_markov_concat = use_markov_concat
         print('======= Settings =======')
         print('-------- Models --------')
         print('GAN: %s\nclip: %.3f\nG lambda %.3f\nF lambda %.3f\n'
@@ -69,10 +70,17 @@ class CycleGAIL(object):
         self.build_model()
         print('CycleGAIL: Build graph finished !')
 
+    def markov_concat(self, current):
+        if not self.use_markov_concat:
+            return current
+        dd = tf.shape(current)[1]
+        pre = tf.concat([tf.zeros([1, dd]), current[1:, :]], axis=0)
+        return tf.concat([pre, current], axis=1)
+
     def gradient_penalty(self, name, real, fake):
         alpha = tf.random_uniform([tf.shape(real)[0], 1], 0., 1.)
         hat = alpha * real + ((1 - alpha) * fake)
-        critic_hat_a = self.dis_net(name, hat)
+        critic_hat_a = self.dis_net(name, self.markov_concat(hat))
         gradients = tf.gradients(critic_hat_a, [hat])[0]
         slopes = tf.sqrt(tf.reduce_sum(tf.square(gradients),
                                        reduction_indices=[1]))
@@ -116,10 +124,10 @@ class CycleGAIL(object):
         self.fake_a = tf.concat([self.fake_obs_a, self.fake_act_a], 1)
         self.real_b = tf.concat([self.real_obs_b, self.real_act_b], 1)
         self.fake_b = tf.concat([self.fake_obs_b, self.fake_act_b], 1)
-        self.d_real_a = self.dis_net('d_a', self.real_a)
-        self.d_real_b = self.dis_net('d_b', self.real_b)
-        self.d_fake_a = self.dis_net('d_a', self.fake_a)
-        self.d_fake_b = self.dis_net('d_b', self.fake_b)
+        self.d_real_a = self.dis_net('d_a', self.markov_concat(self.real_a))
+        self.d_real_b = self.dis_net('d_b', self.markov_concat(self.real_b))
+        self.d_fake_a = self.dis_net('d_a', self.markov_concat(self.fake_a))
+        self.d_fake_b = self.dis_net('d_b', self.markov_concat(self.fake_b))
 
         self.wdist_a = tf.reduce_mean(self.d_real_a - self.d_fake_a)
         self.wdist_b = tf.reduce_mean(self.d_real_b - self.d_fake_b)
@@ -292,7 +300,7 @@ class CycleGAIL(object):
                                     feed_dict=demos)
             ls_fs.append(ls_f)
 
-            if (epoch_idx + 1) % 100 == 0:
+            if (epoch_idx + 1) % 1000 == 0:
                 end_time = time.time()
                 if (epoch_idx + 1) % 100 == 0 and eval_on:
                     self.visual_evaluation(expert_a, expert_b,
@@ -329,9 +337,9 @@ class CycleGAIL(object):
                 pass
             else:
                 os.mkdir(prefix)
-            #save_trajectory_images(self.env_b, obs_b, act_b, prefix)
-            #save_video(prefix + '/real', obs_b.shape[0])
-            #save_video(prefix + '/imag', obs_b.shape[0])
+            save_trajectory_images(self.env_b, obs_b, act_b, prefix)
+            save_video(prefix + '/real', obs_b.shape[0])
+            save_video(prefix + '/imag', obs_b.shape[0])
             distribution_pdiff(demos[self.real_obs_a], demos[self.real_act_a],
                                demos[self.real_obs_b], demos[self.real_act_b],
                                obs_b, act_b, prefix + '/dist')
@@ -341,17 +349,20 @@ class CycleGAIL(object):
             demos = self.get_demo(expert_a, expert_b, is_train=False)
             horizon = demos[self.real_obs_a].shape[0]
 
-            '''path_gta = self.dir_name + '/ground_truth_a'
+            path_gta = self.dir_name + '/ground_truth_a'
             generate_dir(path_gta)
             save_trajectory_images(self.env_a, demos[self.real_obs_a],
                                    demos[self.real_act_a], path_gta)
             save_video(self.dir_name + '/ground_truth_a/real', horizon)
+            save_video(self.dir_name + '/ground_truth_a/imag', horizon)
 
             path_gtb = self.dir_name + '/ground_truth_b'
             generate_dir(path_gtb)
             save_trajectory_images(self.env_a, demos[self.real_obs_a],
                                    demos[self.real_act_a], path_gtb)
-            save_video(self.dir_name + '/ground_truth_b/real', horizon)'''
+            save_video(self.dir_name + '/ground_truth_b/real', horizon)
+            save_video(self.dir_name + '/ground_truth_b/imag', horizon)
+
             self.visual_evaluation(expert_a, expert_b, 111)
             wds = []
             for i in range(50):
@@ -370,7 +381,8 @@ class CycleGAIL(object):
         ckpt = tf.train.get_checkpoint_state(checkpoint_dir)
         if ckpt and ckpt.model_checkpoint_path:
             ckpt_name = os.path.basename(ckpt.model_checkpoint_path)
-            self.saver.restore(self.sess, os.path.join(checkpoint_dir, ckpt_name))
+            self.saver.restore(self.sess,
+                               os.path.join(checkpoint_dir, ckpt_name))
             return True
         else:
             return False

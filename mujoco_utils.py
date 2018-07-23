@@ -23,7 +23,7 @@ def show_animate_trajectory(env, obs, acts, animate=False):
     for i in range(100):
         clip = np.concatenate([obs[i, 1:qpos_dim],
                           np.clip(obs[i, qpos_dim:], -10, 10)])
-        clip = obs[i, 1:]
+        #clip = obs[i, 1:]
         err += np.sum((state - clip) * (state - clip))
         print(np.sum((state - clip) * (state - clip)))
         if animate:
@@ -50,10 +50,10 @@ def save_trajectory_images(env, obs, acts, file_path):
         matplotlib.image.imsave(file_path + '/real%d.jpg' % i,
                                 img, format='jpg')
         env.step(acts[i])
+    env.reset()
     for i in range(horizon):
         qpos = obs[i, :qpos_dim]
         qvel = obs[i, qpos_dim:]
-        env.reset()
         env.env.set_state(qpos, qvel)
         img = env.render(mode='rgb_array')
         matplotlib.image.imsave(file_path + '/imag%d.jpg' % i,
@@ -64,7 +64,8 @@ def save_video(file_prefix, num_items):
     print('Save Trajectory Video as \"%s\"' % (file_prefix + '.avi'))
     fps = 24  # frequency
     fourcc = cv2.VideoWriter_fourcc(*'MJPG')
-    video_writer = cv2.VideoWriter(file_prefix + '.avi', fourcc, fps, (500,500))
+    video_writer = cv2.VideoWriter(file_prefix + '.avi', fourcc, fps,
+                                   (500, 500))
     for i in range(num_items):
         img12 = cv2.imread(file_prefix + str(i) +'.jpg')
         video_writer.write(img12)
@@ -73,12 +74,14 @@ def save_video(file_prefix, num_items):
 
 if __name__ == '__main__':
     np.random.seed(1234)
+    #env_name = 'HalfCheetah-v1'
+    env_name = 'Walker2d-v1'
     demos = Demonstrations(1, 34, 23, 1000000007)
-    demos.load('data/HalfCheetah-v1', 100)
+    demos.load('data/' + env_name, 100)
     demos.set(50)
     obss, acts = demos.next_demo()
     #obss, acts = demos.next_demo()
-    env = gym.make("HalfCheetah-v1")
+    env = gym.make(env_name)
     show_animate_trajectory(env, obss, acts, True)
     #save_trajectory_images('HalfCheetah-v1/t1', env, obss, acts)
     #save_video('HalfCheetah-v1/t1/real', 1000)

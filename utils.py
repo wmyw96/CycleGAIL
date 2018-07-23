@@ -179,16 +179,20 @@ def generate_dir(prefix):
 
 def distribution_pdiff(state0, action0, state1, action1, state2, action2,
                        dir_name):
+    print('Generating distribution diff images')
     generate_dir(dir_name)
+    print('State-action distribution pairs')
     for i in range(state0.shape[1]):
         for j in range(action0.shape[1]):
-            fig = plt.figure(figsize=(8, 8))
-            ax = fig.add_subplot(111)
-            ax.scatter(state0[:, i], action0[:, j], color='b', s=0.5)
-            ax.scatter(state1[:, i], action1[:, j], color='r', s=0.5)
-            ax.scatter(state2[:, i], action2[:, j], color='y', s=0.5)
+            print('%d %d' % (i, j))
+            plt.figure()
+            print('fgp')
+            plt.scatter(state0[:, i], action0[:, j], color='b', s=0.5)
+            plt.scatter(state1[:, i], action1[:, j], color='r', s=0.5)
+            plt.scatter(state2[:, i], action2[:, j], color='y', s=0.5)
             plt.savefig(dir_name + '/s%da%d' % (i, j))
             plt.close()
+    print('State-state distribution pairs')
     for i in range(state0.shape[1]):
         for j in range(state0.shape[1]):
             fig = plt.figure(figsize=(8, 8))
@@ -198,6 +202,7 @@ def distribution_pdiff(state0, action0, state1, action1, state2, action2,
             ax.scatter(state2[:, i], state2[:, j], color='y', s=0.5)
             plt.savefig(dir_name + '/s%ds%d' % (i, j))
             plt.close()
+    print('Action-action distribution pairs')
     for i in range(action0.shape[1]):
         for j in range(action0.shape[1]):
             fig = plt.figure(figsize=(8, 8))
