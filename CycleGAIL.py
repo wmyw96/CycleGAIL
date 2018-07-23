@@ -30,7 +30,7 @@ class CycleGAIL(object):
                  hidden_f, hidden_g, hidden_d,
                  lambda_g, lambda_f, gamma, use_orac_loss, loss_metric='L1',
                  checkpoint_dir=None, spect=True, loss='wgan',
-                 vis_mode='synthetic', use_markov_concat=True):
+                 vis_mode='synthetic', use_markov_concat=False):
         self.sess = sess
         self.clip = clip
         self.env_a = env_a
@@ -215,16 +215,17 @@ class CycleGAIL(object):
         tobs = self.sess.run(tobs_gen, feed_dict=demos)
         tact = self.sess.run(tact_gen, feed_dict=demos)
         tenv.reset()
-        tenv.env.set_state(tobs[0, :9], tobs[0, 9:])
+        tenv.env.set_state(sobs[0, :9], sobs[0, 9:])
         for i in range(horizon - 1):
-            #tenv.reset()
-            #tenv.env.set_state(tobs[i, :9], tobs[i, 9:])
+            # local oracle: unstable
+            # tenv.reset()
+            # tenv.env.set_state(tobs[i, :9], tobs[i, 9:])
             tenv.step(tact[i])
             nxt_obs = \
                 np.concatenate([tenv.env.model.data.qpos,
                                 tenv.env.model.data.qvel]).reshape(-1)
             obs_orac[i + 1, :] = nxt_obs
-        obs_orac[0, :] = tobs[0, :]
+        obs_orac[0, :] = sobs[0, :]
         return obs_orac
 
     def get_oracle(self, demos):
