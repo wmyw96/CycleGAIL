@@ -45,11 +45,21 @@ def save_trajectory_images(env, obs, acts, file_path):
     horizon = obs.shape[0]
     print('Save Trajectory Images in \"%s\": %d timesteps' % (
         file_path, horizon))
+    true_obs = np.zeros_like(obs)
+    true_obs[0, :] = obs[0, :]
+    reward_sum = 0
     for i in range(horizon):
         img = env.render(mode='rgb_array')
         matplotlib.image.imsave(file_path + '/real%d.jpg' % i,
                                 img, format='jpg')
-        env.step(acts[i])
+        _1, rd, _2, _3 = env.step(acts[i])
+        reward_sum += rd
+        nxt_obs = \
+            np.concatenate([env.env.model.data.qpos,
+                            env.env.model.data.qvel]).reshape(-1)
+        if i + 1 < horizon:
+            true_obs[i + 1, :] = nxt_obs
+    print('Total reward: %3f\n' % reward_sum)
     env.reset()
     for i in range(horizon):
         qpos = obs[i, :qpos_dim]
@@ -58,6 +68,7 @@ def save_trajectory_images(env, obs, acts, file_path):
         img = env.render(mode='rgb_array')
         matplotlib.image.imsave(file_path + '/imag%d.jpg' % i,
                                 img, format='jpg')
+    return true_obs
 
 
 def save_video(file_prefix, num_items):

@@ -11,7 +11,6 @@ from mujoco_utils import *
 import tflib as lib
 import tflib.ops.linear
 
-
 def relu_layer(name, n_in, n_out, inputs):
     output = lib.ops.linear.Linear(
         name+'.Linear',
@@ -147,9 +146,10 @@ class CycleGAIL(object):
         self.loss_f = self.loss_gf_a + self.loss_gf_b + \
             self.lambda_f * (self.cycle_obs_a + self.cycle_obs_b)
 
-        self.loss_f += self.gamma * \
-            (cycle_loss(self.fake_obs_a, self.orac_obs_a, self.loss_metric) +
-             cycle_loss(self.fake_obs_b, self.orac_obs_b, self.loss_metric))
+        self.loss_o = \
+            cycle_loss(self.fake_obs_a, self.orac_obs_a, self.loss_metric) + \
+            cycle_loss(self.fake_obs_b, self.orac_obs_b, self.loss_metric)
+        self.loss_f += self.loss_o * self.gamma
 
         self.params_g_a = lib.params_with_name('g_a')
         self.params_g_b = lib.params_with_name('g_b')
@@ -216,30 +216,32 @@ class CycleGAIL(object):
         tact = self.sess.run(tact_gen, feed_dict=demos)
         tenv.reset()
         tenv.env.set_state(sobs[0, :9], sobs[0, 9:])
+        reward_sum = 0.0
         for i in range(horizon - 1):
             # local oracle: unstable
             # tenv.reset()
             # tenv.env.set_state(tobs[i, :9], tobs[i, 9:])
-            tenv.step(tact[i])
+            _1, rd, _2, _3 = tenv.step(tact[i])
+            reward_sum += rd
             nxt_obs = \
                 np.concatenate([tenv.env.model.data.qpos,
                                 tenv.env.model.data.qvel]).reshape(-1)
             obs_orac[i + 1, :] = nxt_obs
         obs_orac[0, :] = sobs[0, :]
-        return obs_orac
+        return obs_orac, reward_sum
 
     def get_oracle(self, demos):
         act_a = demos[self.real_act_a]
         obs_a = demos[self.real_obs_a]
         act_b = demos[self.real_act_b]
         obs_b = demos[self.real_obs_b]
-        demos[self.orac_obs_a] = \
+        demos[self.orac_obs_a], rd_a = \
             self.local_oracle(obs_b, act_b, self.fake_obs_a, self.fake_act_a,
                               self.env_a, demos)
-        demos[self.orac_obs_b] = \
+        demos[self.orac_obs_b], rd_b = \
             self.local_oracle(obs_a, act_a, self.fake_obs_b, self.fake_act_b,
                               self.env_b, demos)
-        return demos
+        return demos, rd_a, rd_b
 
     # suppose have same horizon H
     def train(self, args, expert_a, expert_b, eval_on=True,
@@ -301,6 +303,9 @@ class CycleGAIL(object):
         ls_gs = []
         ls_fs = []
         wds = []
+        rd_as = []
+        rd_bs = []
+        ls_os = []
 
         if eval_on:
             self.visual_evaluation(expert_a, expert_b, 0)
@@ -314,7 +319,7 @@ class CycleGAIL(object):
 
             # add summary
             demos = self.get_demo(expert_a, expert_b)
-            demos = self.get_oracle(demos)
+            demos, _, __ = self.get_oracle(demos)
             summary = self.sess.run(merged, demos)
             self.writer.add_summary(summary, epoch_idx)
 
@@ -332,12 +337,15 @@ class CycleGAIL(object):
             ls_gs.append(ls_g)
             wds.append(wd)
             demos = self.get_demo(expert_a, expert_b)
-            demos = self.get_oracle(demos)
-            ls_f, _ = self.sess.run([self.loss_f, self.f_opt],
-                                    feed_dict=demos)
+            demos, rd_a, rd_b = self.get_oracle(demos)
+            rd_as.append(rd_a)
+            rd_bs.append(rd_b)
+            ls_f, _, o = self.sess.run([self.loss_f, self.f_opt, self.loss_o],
+                                       feed_dict=demos)
+            ls_os.append(o)
             ls_fs.append(ls_f)
 
-            if (epoch_idx + 1) % 1000 == 0:
+            if (epoch_idx + 1) % 1 == 0:
                 end_time = time.time()
                 if (epoch_idx + 1) % 100 == 0 and eval_on:
                     self.visual_evaluation(expert_a, expert_b,
@@ -345,14 +353,19 @@ class CycleGAIL(object):
                 if ck_dir is not None:
                     self.store(ck_dir, epoch_idx + 1)
                 print('Epoch %d (%.3f s), loss D = %.6f, loss G = %.6f,'
-                      'loss F = %6f, w_dist = %.9f' %
+                      'loss F = %6f, w_dist = %.9f\n               reward a ='
+                      ' %.6f, reward b = %.6f, loss O = %.6f' %
                       (epoch_idx, end_time - start_time, float(np.mean(ls_ds)),
                        float(np.mean(ls_gs)), float(np.mean(ls_fs)),
-                       float(np.mean(wds))))
+                       float(np.mean(wds)), float(np.mean(rd_as)),
+                       float(np.mean(rd_bs)), float(np.mean(ls_os))))
                 ls_ds = []
                 ls_gs = []
                 ls_fs = []
                 wds = []
+                rd_as = []
+                rd_bs = []
+                ls_os = []
                 start_time = time.time()
 
     def visual_evaluation(self, expert_a, expert_b, id):
@@ -374,32 +387,49 @@ class CycleGAIL(object):
                 pass
             else:
                 os.mkdir(prefix)
-            save_trajectory_images(self.env_b, obs_b, act_b, prefix)
+            tobs_b = save_trajectory_images(self.env_b, obs_b, act_b, prefix)
+            horizon = obs_b.shape[0]
+            err_act = np.zeros(horizon)
+            err_obs = np.zeros(horizon)
+            err_obs_t = np.zeros(horizon)
+            for i in range(horizon):
+                err_act[i] = \
+                    np.sum(np.abs(act_b[i, :] - demos[self.real_act_a][i, :]))
+                err_obs[i] = \
+                    np.sum(np.abs(obs_b[i, :] - demos[self.real_obs_a][i, :]))
+                err_obs_t[i] = \
+                    np.sum(np.abs(tobs_b[i, :] - obs_b[i, :]))
+            for i in range(horizon):
+                print('%.5f %.5f %.5f' %
+                      (err_act[i], err_obs[i], err_obs_t[i]))
+            print('%.5f %.5f %.5f' % (float(np.mean(err_act)),
+                                      float(np.mean(err_obs)),
+                                      float(np.mean(err_obs_t))))
             save_video(prefix + '/real', obs_b.shape[0])
             save_video(prefix + '/imag', obs_b.shape[0])
-            distribution_pdiff(demos[self.real_obs_a], demos[self.real_act_a],
-                               demos[self.real_obs_b], demos[self.real_act_b],
-                               obs_b, act_b, prefix + '/dist')
+            #distribution_pdiff(demos[self.real_obs_a], demos[self.real_act_a],
+            #                   demos[self.real_obs_b], demos[self.real_act_b],
+            #                   obs_b, act_b, prefix + '/dist')
 
     def evaluation(self, expert_a, expert_b, checkpoint_dir):
         if self.load(checkpoint_dir):
             demos = self.get_demo(expert_a, expert_b, is_train=False)
             horizon = demos[self.real_obs_a].shape[0]
 
-            print(horizon)
-            path_gta = self.dir_name + '/ground_truth_a'
-            generate_dir(path_gta)
-            save_trajectory_images(self.env_a, demos[self.real_obs_a],
-                                   demos[self.real_act_a], path_gta)
-            save_video(self.dir_name + '/ground_truth_a/real', horizon)
-            save_video(self.dir_name + '/ground_truth_a/imag', horizon)
+            if False:
+                path_gta = self.dir_name + '/ground_truth_a'
+                generate_dir(path_gta)
+                save_trajectory_images(self.env_a, demos[self.real_obs_a],
+                                       demos[self.real_act_a], path_gta)
+                save_video(self.dir_name + '/ground_truth_a/real', horizon)
+                save_video(self.dir_name + '/ground_truth_a/imag', horizon)
 
-            path_gtb = self.dir_name + '/ground_truth_b'
-            generate_dir(path_gtb)
-            save_trajectory_images(self.env_a, demos[self.real_obs_a],
-                                   demos[self.real_act_a], path_gtb)
-            save_video(self.dir_name + '/ground_truth_b/real', horizon)
-            save_video(self.dir_name + '/ground_truth_b/imag', horizon)
+                path_gtb = self.dir_name + '/ground_truth_b'
+                generate_dir(path_gtb)
+                save_trajectory_images(self.env_a, demos[self.real_obs_a],
+                                       demos[self.real_act_a], path_gtb)
+                save_video(self.dir_name + '/ground_truth_b/real', horizon)
+                save_video(self.dir_name + '/ground_truth_b/imag', horizon)
 
             self.visual_evaluation(expert_a, expert_b, 111)
             wds = []
