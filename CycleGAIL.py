@@ -11,6 +11,7 @@ from mujoco_utils import *
 import tflib as lib
 import tflib.ops.linear
 
+
 def relu_layer(name, n_in, n_out, inputs):
     output = lib.ops.linear.Linear(
         name+'.Linear',
@@ -84,15 +85,6 @@ class CycleGAIL(object):
         slopes = tf.sqrt(tf.reduce_sum(tf.square(gradients),
                                        reduction_indices=[1]))
         return tf.reduce_mean((slopes - 1) ** 2)
-
-    def gradient_penalty_gen(self, real, fake):
-        grad_norm_sq2 = 0.0
-        for i in range(fake.shape[1]):
-            cur_grad = tf.gradients(fake[:, i], [real])[0]
-            grad_norm_sq2 += tf.reduce_sum(tf.square(cur_grad),
-                                           reduction_indices=[1])
-        grad_norm = tf.sqrt(grad_norm_sq2)
-        return tf.reduce_mean((grad_norm - 1) ** 2)
 
     def build_model(self):
         self.real_act_a = tf.placeholder(tf.float32, [None, self.a_act_dim])

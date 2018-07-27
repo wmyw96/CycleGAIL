@@ -19,11 +19,13 @@ def show_animate_trajectory(env, obs, acts, animate=False):
     horizon = obs.shape[0]
     state = obs[0, 1:]
     err = 0.0
+    print(np.mean(np.var(acts, 0)))
+    print(np.mean(np.var(obs, 0)))
     reward_sum = 0.0
-    for i in range(100):
+    for i in range(horizon):
         clip = np.concatenate([obs[i, 1:qpos_dim],
                           np.clip(obs[i, qpos_dim:], -10, 10)])
-        clip = obs[i, 1:]
+        #clip = obs[i, 1:]
         err += np.sum((state - clip) * (state - clip))
         if animate:
             env.render()
@@ -84,8 +86,8 @@ def save_video(file_prefix, num_items):
 
 if __name__ == '__main__':
     np.random.seed(1234)
-    env_name = 'HalfCheetah-v1'
-    #env_name = 'Walker2d-v1'
+    #env_name = 'HalfCheetah-v1'
+    env_name = 'Walker2d-v1'
     demos = Demonstrations(1, 34, 23, 1000000007)
     demos.load('data/' + env_name, 100)
     demos.set(50)

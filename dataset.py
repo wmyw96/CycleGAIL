@@ -85,4 +85,4 @@ class Demonstrations(object):
     def next_demo(self, train=True):
         obs, act = self._next_demo(train)
         #return obs, act
-        return obs[:100, :], act[:100, :]
+        return obs[:200, :], act[:200, :]
