@@ -116,7 +116,7 @@ if args.mode == 'train':
 '''
 Recommended command:
 python run_synthetic.py --name logs/csyn-wgan --lr 0.00005 --clip 0.01 --nhid 128 --loss_metric L2 --epoch 100000
-python run_synthetic.py --name logs/csyn-wgan-gp-128 --lr 0.0001 --clip 0.01 --nhid 128 --loss_metric L2 --epoch 100000 --ntraj 100 --gam 1.0 --lg 1.0 --lf 1.0 --loss wgan-gp
+python run_synthetic.py --name logs/csyn-wgan-gp-128 --lr 0.0001 --clip 0.01 --nhid 128 --loss_metric L2 --epoch 100000 --ntraj 100 --gam 0.0 --lg 1.0 --lf 1.0 --loss wgan-gp
 python run_cond_synthetic.py --name logs/csyn-wgan-gp-30 --lr 0.0001 --clip 0.01 --nhid 10 --loss_metric L2 --epoch 100000 --ntraj 100 --lg 1.0 --lf 1.0 --loss wgan-gp --nd1 25 --nd2 25
 python run_synthetic.py --name logs/csyn-wgan-gp-30 --lr 0.0001 --clip 0.01 --nhid 10 --loss_metric L2 --epoch 100000 --ntraj 100 --gam 0.0 --lg 1.0 --lf 1.0 --loss wgan-gp
 

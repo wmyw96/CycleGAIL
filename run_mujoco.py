@@ -46,6 +46,8 @@ parser.add_argument('--clip', dest='clip', type=float, default=0.01,
                     help='clip value')
 parser.add_argument('--n_c', dest='n_c', type=int, default=5,
                     help='n_critic')
+parser.add_argument('--markov', dest='markov', type=bool, default=False,
+                    help='use markov concat')
 
 """Dataset setting"""
 parser.add_argument('--ntraj', dest='ntraj', type=int, default=20,
@@ -89,7 +91,8 @@ with tf.Session() as sess:
                       loss_metric=args.loss_metric,
                       checkpoint_dir=None,
                       loss=args.loss,
-                      vis_mode='mujoco')
+                      vis_mode='mujoco',
+                      use_markov_concat=args.markov)
     print('Training Process:')
     if args.mode == 'train':
         model.train(args, demos_a, demos_b, False, args.ckdir)

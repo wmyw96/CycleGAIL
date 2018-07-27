@@ -3,3 +3,4 @@ opencv-python
 matplotlib
 gym==0.9.1
 mujoco-py==0.5.7
+scipy

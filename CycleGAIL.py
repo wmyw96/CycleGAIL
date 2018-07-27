@@ -149,7 +149,14 @@ class CycleGAIL(object):
         self.loss_o = \
             cycle_loss(self.fake_obs_a, self.orac_obs_a, self.loss_metric) + \
             cycle_loss(self.fake_obs_b, self.orac_obs_b, self.loss_metric)
-        self.loss_f += self.loss_o * self.gamma
+        #self.loss_f += self.loss_o * self.gamma
+
+        self.loss_ident_f = \
+            cycle_loss(self.fake_obs_a, self.real_obs_b, self.loss_metric) + \
+            cycle_loss(self.fake_obs_b, self.real_obs_a, self.loss_metric)
+        self.loss_ident_g = \
+            cycle_loss(self.fake_act_a, self.real_act_b, self.loss_metric) + \
+            cycle_loss(self.fake_act_b, self.real_act_a, self.loss_metric)
 
         self.params_g_a = lib.params_with_name('g_a')
         self.params_g_b = lib.params_with_name('g_b')
@@ -306,6 +313,8 @@ class CycleGAIL(object):
         rd_as = []
         rd_bs = []
         ls_os = []
+        ls_igs = []
+        ls_ifs = []
 
         if eval_on:
             self.visual_evaluation(expert_a, expert_b, 0)
@@ -332,9 +341,13 @@ class CycleGAIL(object):
                 ls_ds.append(ls_d)
 
             demos = self.get_demo(expert_a, expert_b)
-            ls_g, _, wd = self.sess.run([self.loss_g, self.g_opt, self.wdist],
-                                        feed_dict=demos)
+            ls_g, _, wd, ls_ig, ls_if = \
+                self.sess.run([self.loss_g, self.g_opt, self.wdist,
+                               self.loss_ident_g, self.loss_ident_f],
+                              feed_dict=demos)
             ls_gs.append(ls_g)
+            ls_igs.append(ls_ig)
+            ls_ifs.append(ls_if)
             wds.append(wd)
             demos = self.get_demo(expert_a, expert_b)
             demos, rd_a, rd_b = self.get_oracle(demos)
@@ -354,11 +367,13 @@ class CycleGAIL(object):
                     self.store(ck_dir, epoch_idx + 1)
                 print('Epoch %d (%.3f s), loss D = %.6f, loss G = %.6f,'
                       'loss F = %6f, w_dist = %.9f\n               reward a ='
-                      ' %.6f, reward b = %.6f, loss O = %.6f' %
+                      ' %.6f, reward b = %.6f, loss O = %.6f, loss ident G = '
+                      '%.6f, loss ident F = %.6f' %
                       (epoch_idx, end_time - start_time, float(np.mean(ls_ds)),
                        float(np.mean(ls_gs)), float(np.mean(ls_fs)),
                        float(np.mean(wds)), float(np.mean(rd_as)),
-                       float(np.mean(rd_bs)), float(np.mean(ls_os))))
+                       float(np.mean(rd_bs)), float(np.mean(ls_os)),
+                       float(np.mean(ls_igs)), float(np.mean(ls_ifs))))
                 ls_ds = []
                 ls_gs = []
                 ls_fs = []
@@ -366,6 +381,8 @@ class CycleGAIL(object):
                 rd_as = []
                 rd_bs = []
                 ls_os = []
+                ls_ifs = []
+                ls_igs = []
                 start_time = time.time()
 
     def visual_evaluation(self, expert_a, expert_b, id):
