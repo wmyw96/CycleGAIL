@@ -25,6 +25,7 @@ def show_animate_trajectory(env, obs, acts, animate=False):
     for i in range(horizon):
         clip = np.concatenate([obs[i, 1:qpos_dim],
                           np.clip(obs[i, qpos_dim:], -10, 10)])
+        #print(state)
         #clip = obs[i, 1:]
         err += np.sum((state - clip) * (state - clip))
         if animate:
@@ -88,6 +89,8 @@ if __name__ == '__main__':
     np.random.seed(1234)
     #env_name = 'HalfCheetah-v1'
     env_name = 'Walker2d-v1'
+    #env_name = 'Ant-v1'
+    #env_name = 'Humanoid-v1'
     demos = Demonstrations(1, 34, 23, 1000000007)
     demos.load('data/' + env_name, 100)
     demos.set(50)

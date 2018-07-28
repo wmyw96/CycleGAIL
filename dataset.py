@@ -16,6 +16,10 @@ class Demonstrations(object):
         self.test_pointer = 0
         self.train_demos = []
         self.train_pointer = 0
+        self.batch_size = 0
+        self.batch_pointer = 0
+        self.cur_obs = np.zeros((1, 1))
+        self.cur_act = np.zeros((1, 1))
 
     def add_demo(self, state, action):
         self.demos.append((state, action))
@@ -58,6 +62,10 @@ class Demonstrations(object):
             self.test_demos.append(self.demos[i + num_trains])
         self.test_pointer = self.pointer - num_trains
 
+    def set_bz(self, batch_size):
+        self.batch_size = batch_size
+        self.batch_pointer = -1
+
     def load(self, file_name, nitems):
         if os.path.isdir(file_name):
             pass
@@ -84,5 +92,16 @@ class Demonstrations(object):
 
     def next_demo(self, train=True):
         obs, act = self._next_demo(train)
-        #return obs, act
-        return obs[:200, :], act[:200, :]
+        return obs, act
+
+    def next_batch(self):
+        if self.batch_pointer == -1 or \
+           self.batch_pointer >= self.cur_obs.shape[0]:
+            self.cur_obs, self.cur_act = self.next_demo(train=True)
+            self.batch_pointer = 0
+        ed = min(self.batch_pointer + self.batch_size,
+                 self.cur_obs.shape[0])
+        rt_obs = self.cur_obs[self.batch_pointer:ed, :]
+        rt_act = self.cur_act[self.batch_pointer:ed, :]
+        self.batch_pointer = ed
+        return rt_obs, rt_act

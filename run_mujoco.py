@@ -31,6 +31,9 @@ parser.add_argument('--envb', dest='envb', type=str,
                     default='HalfCheetah-v1', help='environment B name')
 parser.add_argument("--ckdir", dest='ckdir', type=str,
                     default='aaa', help='checkpoint direction')
+parser.add_argument('--markov', dest='markov', type=bool, default=False,
+                    help='use markov concat')
+
 """Arguments related to run mode"""
 parser.add_argument('--mode', dest='mode', default='train',
                     help='gen, train, test')
@@ -46,8 +49,10 @@ parser.add_argument('--clip', dest='clip', type=float, default=0.01,
                     help='clip value')
 parser.add_argument('--n_c', dest='n_c', type=int, default=5,
                     help='n_critic')
-parser.add_argument('--markov', dest='markov', type=bool, default=False,
-                    help='use markov concat')
+parser.add_argument('--log_interval', dest='log_interval', type=int, default=1,
+                    help='length of log interval')
+parser.add_argument('--batch_size', dest='batch_size', type=int, default=100,
+                    help='batch size')
 
 """Dataset setting"""
 parser.add_argument('--ntraj', dest='ntraj', type=int, default=20,
@@ -73,6 +78,8 @@ print('Load data : Expert #2 Demonstrations')
 demos_b.load('data/' + args.envb, args.ntraj)
 demos_a.set(args.nd1)
 demos_b.set(args.nd2)
+demos_a.set_bz(args.batch_size)
+demos_b.set_bz(args.batch_size)
 try:
     enva = gym.make(args.enva)
     envb = gym.make(args.envb)

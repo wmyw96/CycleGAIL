@@ -73,12 +73,11 @@ class CycleGAIL(object):
     def markov_concat(self, current):
         if not self.use_markov_concat:
             return current
-        dd = tf.shape(current)[1]
-        pre = tf.concat([tf.zeros([1, dd]), current[1:, :]], axis=0)
-        return tf.concat([pre, current], axis=1)
+        return tf.concat([current[1:,:], current[:-1,:]], axis=1)
 
     def gradient_penalty(self, name, real, fake):
         alpha = tf.random_uniform([tf.shape(real)[0], 1], 0., 1.)
+
         hat = alpha * real + ((1 - alpha) * fake)
         critic_hat_a = self.dis_net(name, self.markov_concat(hat))
         gradients = tf.gradients(critic_hat_a, [hat])[0]
@@ -199,8 +198,12 @@ class CycleGAIL(object):
             print(param.name, ': ', param.get_shape())
 
     def get_demo(self, expert_a, expert_b, is_train=True):
-        obs_a, act_a = expert_a.next_demo(is_train)
-        obs_b, act_b = expert_b.next_demo(is_train)
+        if is_train:
+            obs_a, act_a = expert_a.next_batch()
+            obs_b, act_b = expert_b.next_batch()
+        else:
+            obs_a, act_a = expert_a.next_demo(is_train)
+            obs_b, act_b = expert_b.next_demo(is_train)
         demos = {self.real_obs_a: obs_a,
                  self.real_act_a: act_a,
                  self.real_obs_b: obs_b,
@@ -342,17 +345,19 @@ class CycleGAIL(object):
             ls_ifs.append(ls_if)
             wds.append(wd)
             demos = self.get_demo(expert_a, expert_b)
-            demos, rd_a, rd_b = self.get_oracle(demos)
+            #demos, rd_a, rd_b = self.get_oracle(demos)
+            rd_a, rd_b = 0.0, 0.0
             rd_as.append(rd_a)
             rd_bs.append(rd_b)
-            ls_f, _, o = self.sess.run([self.loss_f, self.f_opt, self.loss_o],
-                                       feed_dict=demos)
+            ls_f, _ = self.sess.run([self.loss_f, self.f_opt],
+                                    feed_dict=demos)
+            o = 0.0
             ls_os.append(o)
             ls_fs.append(ls_f)
 
-            if (epoch_idx + 1) % 1 == 0:
+            if (epoch_idx + 1) % args.log_interval == 0:
                 end_time = time.time()
-                if (epoch_idx + 1) % 100 == 0 and eval_on:
+                if eval_on:
                     self.visual_evaluation(expert_a, expert_b,
                                            (epoch_idx + 1) // 100)
                 if ck_dir is not None:
