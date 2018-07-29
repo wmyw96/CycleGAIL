@@ -73,7 +73,7 @@ class CycleGAIL(object):
     def markov_concat(self, current):
         if not self.use_markov_concat:
             return current
-        return tf.concat([current[1:,:], current[:-1,:]], axis=1)
+        return tf.concat([current[1:, :], current[:-1, :]], axis=1)
 
     def gradient_penalty(self, name, real, fake):
         alpha = tf.random_uniform([tf.shape(real)[0], 1], 0., 1.)
@@ -174,7 +174,7 @@ class CycleGAIL(object):
             hidden = self.hidden_g
         out = relu_layer(prefix + '.1', pre_dim, hidden, inp)
         out = relu_layer(prefix + '.2', hidden, hidden, out)
-        out = relu_layer(prefix + '.3', hidden, hidden, out)
+        #out = relu_layer(prefix + '.3', hidden, hidden, out)
         out = lib.ops.linear.Linear(prefix + '.4', hidden, out_dim, out)
         return out
 
@@ -182,7 +182,7 @@ class CycleGAIL(object):
         pre_dim = int(inp.get_shape()[-1])
         out = relu_layer(prefix + '.1', pre_dim, self.hidden_d, inp)
         out = relu_layer(prefix + '.2', self.hidden_d, self.hidden_d, out)
-        out = relu_layer(prefix + '.3', self.hidden_d, self.hidden_d, out)
+        #out = relu_layer(prefix + '.3', self.hidden_d, self.hidden_d, out)
         out = lib.ops.linear.Linear(prefix + '.4', self.hidden_d, 1, out)
         return out
 

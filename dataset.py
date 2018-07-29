@@ -93,6 +93,7 @@ class Demonstrations(object):
     def next_demo(self, train=True):
         obs, act = self._next_demo(train)
         return obs, act
+        #return obs[:1000, :], act[:1000, :]
 
     def next_batch(self):
         if self.batch_pointer == -1 or \
