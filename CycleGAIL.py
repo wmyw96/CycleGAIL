@@ -136,6 +136,9 @@ class CycleGAIL(object):
             self.lambda_g * (self.cycle_act_a + self.cycle_act_b)
         self.loss_f = self.loss_gf_a + self.loss_gf_b + \
             self.lambda_f * (self.cycle_obs_a + self.cycle_obs_b)
+        self.loss_gf = self.loss_gf_a + self.loss_gf_b + \
+            self.lambda_g * (self.cycle_act_a + self.cycle_act_b) + \
+            self.lambda_f * (self.cycle_obs_a + self.cycle_obs_b)
 
         self.loss_o = \
             cycle_loss(self.fake_obs_a, self.orac_obs_a, self.loss_metric) + \
@@ -148,6 +151,10 @@ class CycleGAIL(object):
         self.loss_ident_g = \
             cycle_loss(self.fake_act_a, self.real_act_b, self.loss_metric) + \
             cycle_loss(self.fake_act_b, self.real_act_a, self.loss_metric)
+        self.loss_best_g = \
+            cycle_loss(self.real_act_a, self.real_act_b, self.loss_metric)
+        self.loss_best_f = \
+            cycle_loss(self.real_obs_a, self.real_obs_b, self.loss_metric)
 
         self.params_g_a = lib.params_with_name('g_a')
         self.params_g_b = lib.params_with_name('g_b')
@@ -158,12 +165,13 @@ class CycleGAIL(object):
         self.params_d = self.params_d_a + self.params_d_b
         self.params_g = self.params_g_a + self.params_g_b
         self.params_f = self.params_f_a + self.params_f_b
+        self.params_gf = self.params_f + self.params_g
         self.saver = tf.train.Saver()
 
     def gen_net(self, prefix, inp, out_dim):
         pre_dim = int(inp.get_shape()[-1])
-        #if prefix[0] == 'f':
-        #    return inp
+        # if prefix[0] == 'f':
+        #     return inp
         # if prefix == 'f_a':
         #     return inp * np.array([[1, 1, 0.5]])
         # if prefix == 'f_b':
@@ -174,7 +182,7 @@ class CycleGAIL(object):
             hidden = self.hidden_g
         out = relu_layer(prefix + '.1', pre_dim, hidden, inp)
         out = relu_layer(prefix + '.2', hidden, hidden, out)
-        #out = relu_layer(prefix + '.3', hidden, hidden, out)
+        out = relu_layer(prefix + '.3', hidden, hidden, out)
         out = lib.ops.linear.Linear(prefix + '.4', hidden, out_dim, out)
         return out
 
@@ -182,7 +190,7 @@ class CycleGAIL(object):
         pre_dim = int(inp.get_shape()[-1])
         out = relu_layer(prefix + '.1', pre_dim, self.hidden_d, inp)
         out = relu_layer(prefix + '.2', self.hidden_d, self.hidden_d, out)
-        #out = relu_layer(prefix + '.3', self.hidden_d, self.hidden_d, out)
+        out = relu_layer(prefix + '.3', self.hidden_d, self.hidden_d, out)
         out = lib.ops.linear.Linear(prefix + '.4', self.hidden_d, 1, out)
         return out
 
@@ -270,6 +278,9 @@ class CycleGAIL(object):
             else:
                 self.f_opt = tf.no_op()
             self.clip_d = self.clip_trainable_params(self.params_d)
+            self.gf_opt = \
+                tf.train.RMSPropOptimizer(args.lr).\
+                    minimize(self.loss_gf, var_list=self.params_gf)
         else:
             self.d_opt = \
                 tf.train.AdamOptimizer(args.lr, beta1=0.5, beta2=0.9).\
@@ -286,6 +297,9 @@ class CycleGAIL(object):
                         minimize(self.loss_f, var_list=self.params_f)
             else:
                 self.f_opt = tf.no_op()
+            self.gf_opt = \
+                tf.train.AdamOptimizer(args.lr, beta1=0.5, beta2=0.9).\
+                minimize(self.loss_gf, var_list=self.params_gf)
         self.show_params('generator g', self.params_g)
         self.show_params('generator f', self.params_f)
         self.show_params('discriminator d', self.params_d)
@@ -304,10 +318,10 @@ class CycleGAIL(object):
         ls_ds = []
         ls_gs = []
         ls_fs = []
+        ls_gfs = []
+        ls_bgs = []
+        ls_bfs = []
         wds = []
-        rd_as = []
-        rd_bs = []
-        ls_os = []
         ls_igs = []
         ls_ifs = []
 
@@ -323,7 +337,7 @@ class CycleGAIL(object):
 
             # add summary
             demos = self.get_demo(expert_a, expert_b)
-            demos, _, __ = self.get_oracle(demos)
+            # demos, _, __ = self.get_oracle(demos)
             summary = self.sess.run(merged, demos)
             self.writer.add_summary(summary, epoch_idx)
 
@@ -336,23 +350,21 @@ class CycleGAIL(object):
                 ls_ds.append(ls_d)
 
             demos = self.get_demo(expert_a, expert_b)
-            ls_g, _, wd, ls_ig, ls_if = \
-                self.sess.run([self.loss_g, self.g_opt, self.wdist,
-                               self.loss_ident_g, self.loss_ident_f],
+            _, ls_g, ls_f, ls_gf, wd, ls_ig, ls_if, ls_bf, ls_bg = \
+                self.sess.run([self.gf_opt, self.loss_g, self.loss_f,
+                               self.loss_gf, self.wdist,
+                               self.loss_ident_g, self.loss_ident_f,
+                               self.loss_best_f, self.loss_best_g],
                               feed_dict=demos)
             ls_gs.append(ls_g)
+            ls_fs.append(ls_f)
+            ls_gfs.append(ls_gf)
             ls_igs.append(ls_ig)
             ls_ifs.append(ls_if)
+            ls_bfs.append(ls_bf)
+            ls_bgs.append(ls_bg)
             wds.append(wd)
-            demos = self.get_demo(expert_a, expert_b)
-            #demos, rd_a, rd_b = self.get_oracle(demos)
-            rd_a, rd_b = 0.0, 0.0
-            rd_as.append(rd_a)
-            rd_bs.append(rd_b)
-            ls_f, _ = self.sess.run([self.loss_f, self.f_opt],
-                                    feed_dict=demos)
-            o = 0.0
-            ls_os.append(o)
+
             ls_fs.append(ls_f)
 
             if (epoch_idx + 1) % args.log_interval == 0:
@@ -363,23 +375,22 @@ class CycleGAIL(object):
                 if ck_dir is not None:
                     self.store(ck_dir, epoch_idx + 1)
                 print('Epoch %d (%.3f s), loss D = %.6f, loss G = %.6f,'
-                      'loss F = %6f, w_dist = %.9f\n               reward a ='
-                      ' %.6f, reward b = %.6f, loss O = %.6f, loss ident G = '
-                      '%.6f, loss ident F = %.6f' %
+                      'loss F = %6f, w_dist = %.9f, loss G_F = %.6f, '
+                      'loss ident G = %.6f, loss ident F = %.6f, '
+                      'loss best G = %.6f, loss best F = %.6f' %
                       (epoch_idx, end_time - start_time, float(np.mean(ls_ds)),
                        float(np.mean(ls_gs)), float(np.mean(ls_fs)),
-                       float(np.mean(wds)), float(np.mean(rd_as)),
-                       float(np.mean(rd_bs)), float(np.mean(ls_os)),
-                       float(np.mean(ls_igs)), float(np.mean(ls_ifs))))
+                       float(np.mean(wds)), float(np.mean(ls_gfs)),
+                       float(np.mean(ls_igs)), float(np.mean(ls_ifs)),
+                       float(np.mean(ls_bgs)), float(np.mean(ls_bfs))))
                 ls_ds = []
                 ls_gs = []
                 ls_fs = []
                 wds = []
-                rd_as = []
-                rd_bs = []
-                ls_os = []
+                ls_gfs = []
                 ls_ifs = []
                 ls_igs = []
+                ls_bgs, ls_bfs = [], []
                 start_time = time.time()
 
     def visual_evaluation(self, expert_a, expert_b, id):

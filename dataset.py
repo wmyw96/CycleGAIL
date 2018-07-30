@@ -20,6 +20,10 @@ class Demonstrations(object):
         self.batch_pointer = 0
         self.cur_obs = np.zeros((1, 1))
         self.cur_act = np.zeros((1, 1))
+        self.act_scalar = None
+        self.act_bias = None
+        self.obs_scalar = None
+        self.obs_bias = None
 
     def add_demo(self, state, action):
         self.demos.append((state, action))
@@ -77,6 +81,7 @@ class Demonstrations(object):
             state = np.load(file_name + 'traj%d_obs.npy' % i)
             action = np.load(file_name + 'traj%d_act.npy' % i)
             self.add_demo(state, action)
+        self.normalize()
 
     def save(self, file_name):
         if os.path.isdir(file_name):
@@ -92,13 +97,21 @@ class Demonstrations(object):
 
     def next_demo(self, train=True):
         obs, act = self._next_demo(train)
-        return obs, act
-        #return obs[:1000, :], act[:1000, :]
+        #return obs, act
+        return (obs[:100, :] - self.obs_bias) / self.obs_scalar, \
+               (act[:100, :] - self.act_bias) / self.act_scalar
+        #return obs[:100, :], act[:100, :]
+        #return obs[900:1000, :], act[900:1000, :]
 
     def next_batch(self):
         if self.batch_pointer == -1 or \
            self.batch_pointer >= self.cur_obs.shape[0]:
             self.cur_obs, self.cur_act = self.next_demo(train=True)
+            # arr = np.arange(self.cur_obs.shape[0])
+            # np.random.shuffle(arr)
+            # indexs = [int(i) for i in arr]
+            # self.cur_obs = self.cur_obs[indexs, :]
+            # self.cur_act = self.cur_act[indexs, :]
             self.batch_pointer = 0
         ed = min(self.batch_pointer + self.batch_size,
                  self.cur_obs.shape[0])
@@ -106,3 +119,17 @@ class Demonstrations(object):
         rt_act = self.cur_act[self.batch_pointer:ed, :]
         self.batch_pointer = ed
         return rt_obs, rt_act
+
+    def normalize(self):
+        obs_full = []
+        act_full = []
+        for oa_pair in self.demos:
+            obs, act = oa_pair
+            obs_full.append(obs)
+            act_full.append(act)
+        obs_full = np.concatenate(obs_full, 0)
+        act_full = np.concatenate(act_full, 0)
+        self.obs_bias = np.mean(obs_full, 0)
+        self.act_bias = np.mean(act_full, 0)
+        self.obs_scalar = np.sqrt(np.var(obs_full, 0))
+        self.act_scalar = np.sqrt(np.var(act_full, 0))
