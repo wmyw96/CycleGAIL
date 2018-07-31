@@ -16,11 +16,13 @@ def lrelu(x, alpha=0.2):
     # return tf.maximum(x, x * alpha)
 
 
-def cycle_loss(origin, reconstructed, metric, name=None):
+def cycle_loss(origin, reconstructed, metric, weight=None):
+    if weight is None:
+        weight = np.ones((1, origin.get_shape()[1]))
     if metric == 'L1':
-        return tf.reduce_mean(tf.abs(origin - reconstructed), name=name)
+        return tf.reduce_mean(tf.abs(origin - reconstructed) * weight)
     if metric == 'L2':
-        return tf.reduce_mean(tf.square(origin - reconstructed), name=name)
+        return tf.reduce_mean(tf.square(origin - reconstructed) * weight)
     raise NotImplementedError
 
 

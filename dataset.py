@@ -98,15 +98,17 @@ class Demonstrations(object):
     def next_demo(self, train=True):
         obs, act = self._next_demo(train)
         #return obs, act
-        return (obs[:100, :] - self.obs_bias) / self.obs_scalar, \
-               (act[:100, :] - self.act_bias) / self.act_scalar
+        return (obs - self.obs_bias) / self.obs_scalar, \
+               (act - self.act_bias) / self.act_scalar, \
+               np.array(range(obs.shape[0]), dtype=np.float32) / \
+               float(obs.shape[0])
         #return obs[:100, :], act[:100, :]
         #return obs[900:1000, :], act[900:1000, :]
 
     def next_batch(self):
         if self.batch_pointer == -1 or \
            self.batch_pointer >= self.cur_obs.shape[0]:
-            self.cur_obs, self.cur_act = self.next_demo(train=True)
+            self.cur_obs, self.cur_act, _ = self.next_demo(train=True)
             # arr = np.arange(self.cur_obs.shape[0])
             # np.random.shuffle(arr)
             # indexs = [int(i) for i in arr]
@@ -117,8 +119,12 @@ class Demonstrations(object):
                  self.cur_obs.shape[0])
         rt_obs = self.cur_obs[self.batch_pointer:ed, :]
         rt_act = self.cur_act[self.batch_pointer:ed, :]
+        horizon = self.cur_obs.shape[0]
+        ts = np.zeros((rt_obs.shape[0], 1))
+        for i in range(ed - self.batch_pointer):
+            ts[i, 0] = (i + self.batch_pointer + 0.0) / horizon
         self.batch_pointer = ed
-        return rt_obs, rt_act
+        return rt_obs, rt_act, ts
 
     def normalize(self):
         obs_full = []
@@ -129,7 +135,13 @@ class Demonstrations(object):
             act_full.append(act)
         obs_full = np.concatenate(obs_full, 0)
         act_full = np.concatenate(act_full, 0)
-        self.obs_bias = np.mean(obs_full, 0)
-        self.act_bias = np.mean(act_full, 0)
-        self.obs_scalar = np.sqrt(np.var(obs_full, 0))
-        self.act_scalar = np.sqrt(np.var(act_full, 0))
+        self.obs_bias = np.mean(obs_full, 0, keepdims=True)
+        self.act_bias = np.mean(act_full, 0, keepdims=True)
+        self.obs_scalar = np.sqrt(np.var(obs_full, 0, keepdims=True))
+        self.act_scalar = np.sqrt(np.var(act_full, 0, keepdims=True))
+
+    def act_r(self, acts):
+        return acts * self.act_scalar + self.act_bias
+
+    def obs_r(self, acts):
+        return acts * self.obs_scalar + self.obs_bias

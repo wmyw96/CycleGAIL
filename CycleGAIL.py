@@ -28,7 +28,8 @@ class CycleGAIL(object):
     def __init__(self, name, sess, clip, env_a, env_b,
                  a_act_dim, b_act_dim, a_obs_dim, b_obs_dim,
                  hidden_f, hidden_g, hidden_d,
-                 lambda_g, lambda_f, gamma, use_orac_loss, loss_metric='L1',
+                 w_obs_a, w_obs_b, w_act_a, w_act_b,
+                 lambda_g, lambda_f, gamma, use_orac_loss, metric='L1',
                  checkpoint_dir=None, spect=True, loss='wgan',
                  vis_mode='synthetic', use_markov_concat=False):
         self.sess = sess
@@ -37,7 +38,7 @@ class CycleGAIL(object):
         self.env_b = env_b
         self.vis_mode = vis_mode
 
-        self.loss_metric = loss_metric
+        self.metric = metric
         self.checkpoint_dir = checkpoint_dir
         self.dir_name = name
         self.a_act_dim = a_act_dim
@@ -59,7 +60,7 @@ class CycleGAIL(object):
         print('GAN: %s\nclip: %.3f\nG lambda %.3f\nF lambda %.3f\n'
               'Loss metric: %s\nUse oloss: %s\nGamma: %.3f\nF Hidden size: '
               '%d\nG Hidden size: %d\nD Hidden size: %d'
-              % (loss, clip, lambda_g, lambda_f, loss_metric,
+              % (loss, clip, lambda_g, lambda_f, metric,
                  str(use_orac_loss), gamma, hidden_f, hidden_g, hidden_d))
         print('----- Environments -----')
         print('Domain A Obs: %d\nDomain A Act: %d\nDomain B Obs: %d\n'
@@ -67,7 +68,7 @@ class CycleGAIL(object):
               % (a_obs_dim, a_act_dim, b_obs_dim, b_act_dim))
 
         print('CycleGAIL: Start building graph ...')
-        self.build_model()
+        self.build_model(w_obs_a, w_obs_b, w_act_a, w_act_b)
         print('CycleGAIL: Build graph finished !')
 
     def markov_concat(self, current):
@@ -85,13 +86,14 @@ class CycleGAIL(object):
                                        reduction_indices=[1]))
         return tf.reduce_mean((slopes - 1) ** 2)
 
-    def build_model(self):
+    def build_model(self, w_obs_a, w_obs_b, w_act_a, w_act_b):
         self.real_act_a = tf.placeholder(tf.float32, [None, self.a_act_dim])
         self.real_act_b = tf.placeholder(tf.float32, [None, self.b_act_dim])
         self.real_obs_a = tf.placeholder(tf.float32, [None, self.a_obs_dim])
         self.real_obs_b = tf.placeholder(tf.float32, [None, self.b_obs_dim])
         self.orac_obs_a = tf.placeholder(tf.float32, [None, self.a_obs_dim])
         self.orac_obs_b = tf.placeholder(tf.float32, [None, self.b_obs_dim])
+        self.ts = tf.placeholder(tf.float32, [None, 1])
 
         self.fake_act_a = self.gen_net('g_a', self.real_act_b, self.a_act_dim)
         self.fake_act_b = self.gen_net('g_b', self.real_act_a, self.b_act_dim)
@@ -104,18 +106,18 @@ class CycleGAIL(object):
         self.inv_obs_b = self.gen_net('f_b', self.fake_obs_a, self.b_obs_dim)
 
         self.cycle_act_a = \
-            cycle_loss(self.real_act_a, self.inv_act_a, self.loss_metric)
+            cycle_loss(self.real_act_a, self.inv_act_a, self.metric, w_act_a)
         self.cycle_act_b = \
-            cycle_loss(self.real_act_b, self.inv_act_b, self.loss_metric)
+            cycle_loss(self.real_act_b, self.inv_act_b, self.metric, w_act_b)
         self.cycle_obs_a = \
-            cycle_loss(self.real_obs_a, self.inv_obs_a, self.loss_metric)
+            cycle_loss(self.real_obs_a, self.inv_obs_a, self.metric, w_obs_a)
         self.cycle_obs_b = \
-            cycle_loss(self.real_obs_b, self.inv_obs_b, self.loss_metric)
+            cycle_loss(self.real_obs_b, self.inv_obs_b, self.metric, w_obs_b)
 
-        self.real_a = tf.concat([self.real_obs_a, self.real_act_a], 1)
-        self.fake_a = tf.concat([self.fake_obs_a, self.fake_act_a], 1)
-        self.real_b = tf.concat([self.real_obs_b, self.real_act_b], 1)
-        self.fake_b = tf.concat([self.fake_obs_b, self.fake_act_b], 1)
+        self.real_a = tf.concat([self.ts, self.real_obs_a, self.real_act_a], 1)
+        self.fake_a = tf.concat([self.ts, self.fake_obs_a, self.fake_act_a], 1)
+        self.real_b = tf.concat([self.ts, self.real_obs_b, self.real_act_b], 1)
+        self.fake_b = tf.concat([self.ts, self.fake_obs_b, self.fake_act_b], 1)
         self.d_real_a = self.dis_net('d_a', self.markov_concat(self.real_a))
         self.d_real_b = self.dis_net('d_b', self.markov_concat(self.real_b))
         self.d_fake_a = self.dis_net('d_a', self.markov_concat(self.fake_a))
@@ -140,21 +142,16 @@ class CycleGAIL(object):
             self.lambda_g * (self.cycle_act_a + self.cycle_act_b) + \
             self.lambda_f * (self.cycle_obs_a + self.cycle_obs_b)
 
-        self.loss_o = \
-            cycle_loss(self.fake_obs_a, self.orac_obs_a, self.loss_metric) + \
-            cycle_loss(self.fake_obs_b, self.orac_obs_b, self.loss_metric)
-        #self.loss_f += self.loss_o * self.gamma
-
         self.loss_ident_f = \
-            cycle_loss(self.fake_obs_a, self.real_obs_b, self.loss_metric) + \
-            cycle_loss(self.fake_obs_b, self.real_obs_a, self.loss_metric)
+            cycle_loss(self.fake_obs_a, self.real_obs_b, self.metric, w_obs_a) + \
+            cycle_loss(self.fake_obs_b, self.real_obs_a, self.metric, w_obs_b)
         self.loss_ident_g = \
-            cycle_loss(self.fake_act_a, self.real_act_b, self.loss_metric) + \
-            cycle_loss(self.fake_act_b, self.real_act_a, self.loss_metric)
+            cycle_loss(self.fake_act_a, self.real_act_b, self.metric, w_act_a) + \
+            cycle_loss(self.fake_act_b, self.real_act_a, self.metric, w_act_b)
         self.loss_best_g = \
-            cycle_loss(self.real_act_a, self.real_act_b, self.loss_metric)
+            cycle_loss(self.real_act_a, self.real_act_b, self.metric, w_act_a)
         self.loss_best_f = \
-            cycle_loss(self.real_obs_a, self.real_obs_b, self.loss_metric)
+            cycle_loss(self.real_obs_a, self.real_obs_b, self.metric, w_obs_a)
 
         self.params_g_a = lib.params_with_name('g_a')
         self.params_g_b = lib.params_with_name('g_b')
@@ -207,15 +204,16 @@ class CycleGAIL(object):
 
     def get_demo(self, expert_a, expert_b, is_train=True):
         if is_train:
-            obs_a, act_a = expert_a.next_batch()
-            obs_b, act_b = expert_b.next_batch()
+            obs_a, act_a, ts = expert_a.next_batch()
+            obs_b, act_b, ts = expert_b.next_batch()
         else:
-            obs_a, act_a = expert_a.next_demo(is_train)
-            obs_b, act_b = expert_b.next_demo(is_train)
+            obs_a, act_a, ts = expert_a.next_demo(is_train)
+            obs_b, act_b, ts = expert_b.next_demo(is_train)
         demos = {self.real_obs_a: obs_a,
                  self.real_act_a: act_a,
                  self.real_obs_b: obs_b,
-                 self.real_act_b: act_b}
+                 self.real_act_b: act_b,
+                 self.ts: ts}
         return demos
 
     def local_oracle(self, sobs, sact, tobs_gen, tact_gen, tenv, demos):
@@ -412,7 +410,32 @@ class CycleGAIL(object):
                 pass
             else:
                 os.mkdir(prefix)
-            tobs_b = save_trajectory_images(self.env_b, obs_b, act_b, prefix)
+            tobs_b = save_trajectory_images(self.env_b,
+                                            expert_b.obs_r(obs_b),
+                                            expert_b.act_r(act_b), prefix)
+            horizon = obs_b.shape[0]
+
+            with open(prefix + 'gtatraj_obs.txt', 'w') as f:
+                for i in range(horizon):
+                    for j in range(demos[self.real_obs_a].shape[1]):
+                        f.write('%.5f ' % demos[self.real_obs_a][i, j])
+                    f.write('\n')
+            with open(prefix + 'gtatraj_act.txt', 'w') as f:
+                for i in range(horizon):
+                    for j in range(demos[self.real_act_a].shape[1]):
+                        f.write('%.5f ' % demos[self.real_act_a][i, j])
+                    f.write('\n')
+            with open(prefix + 'a2btraj_obs.txt', 'w') as f:
+                for i in range(horizon):
+                    for j in range(obs_b.shape[1]):
+                        f.write('%.5f ' % obs_b[i, j])
+                    f.write('\n')
+            with open(prefix + 'a2btraj_act.txt', 'w') as f:
+                for i in range(horizon):
+                    for j in range(act_b.shape[1]):
+                        f.write('%.5f ' % act_b[i, j])
+                    f.write('\n')
+
             horizon = obs_b.shape[0]
             err_act = np.zeros(horizon)
             err_obs = np.zeros(horizon)
@@ -444,15 +467,19 @@ class CycleGAIL(object):
             if False:
                 path_gta = self.dir_name + '/ground_truth_a'
                 generate_dir(path_gta)
-                save_trajectory_images(self.env_a, demos[self.real_obs_a],
-                                       demos[self.real_act_a], path_gta)
+                save_trajectory_images(self.env_a,
+                                       expert_a.obs_r(demos[self.real_obs_a]),
+                                       expert_a.act_r(demos[self.real_act_a]),
+                                       path_gta)
                 save_video(self.dir_name + '/ground_truth_a/real', horizon)
                 save_video(self.dir_name + '/ground_truth_a/imag', horizon)
 
                 path_gtb = self.dir_name + '/ground_truth_b'
                 generate_dir(path_gtb)
-                save_trajectory_images(self.env_a, demos[self.real_obs_a],
-                                       demos[self.real_act_a], path_gtb)
+                save_trajectory_images(self.env_b,
+                                       expert_b.obs_r(demos[self.real_obs_b]),
+                                       expert_b.act_r(demos[self.real_act_b]),
+                                       path_gtb)
                 save_video(self.dir_name + '/ground_truth_b/real', horizon)
                 save_video(self.dir_name + '/ground_truth_b/imag', horizon)
 
