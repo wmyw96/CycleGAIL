@@ -100,8 +100,8 @@ class Demonstrations(object):
         #return obs, act
         return (obs - self.obs_bias) / self.obs_scalar, \
                (act - self.act_bias) / self.act_scalar, \
-               np.array(range(obs.shape[0]), dtype=np.float32) / \
-               float(obs.shape[0])
+               (np.array(range(obs.shape[0]), dtype=np.float32) /
+                float(obs.shape[0])).reshape((-1, 1))
         #return obs[:100, :], act[:100, :]
         #return obs[900:1000, :], act[900:1000, :]
 

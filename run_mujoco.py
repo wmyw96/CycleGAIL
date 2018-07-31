@@ -31,8 +31,8 @@ parser.add_argument('--envb', dest='envb', type=str,
                     default='HalfCheetah-v1', help='environment B name')
 parser.add_argument("--ckdir", dest='ckdir', type=str,
                     default='aaa', help='checkpoint direction')
-parser.add_argument('--markov', dest='markov', type=bool, default=False,
-                    help='use markov concat')
+parser.add_argument('--markov', dest='markov', type=int, default=0,
+                    help='markov concat steps')
 
 """Arguments related to run mode"""
 parser.add_argument('--mode', dest='mode', default='train',
@@ -101,7 +101,7 @@ with tf.Session() as sess:
                       checkpoint_dir=None,
                       loss=args.loss,
                       vis_mode='mujoco',
-                      use_markov_concat=args.markov)
+                      concat_steps=args.markov)
     print('Training Process:')
     if args.mode == 'train':
         model.train(args, demos_a, demos_b, False, args.ckdir)

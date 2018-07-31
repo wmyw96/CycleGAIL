@@ -31,7 +31,7 @@ class CycleGAIL(object):
                  w_obs_a, w_obs_b, w_act_a, w_act_b,
                  lambda_g, lambda_f, gamma, use_orac_loss, metric='L1',
                  checkpoint_dir=None, spect=True, loss='wgan',
-                 vis_mode='synthetic', use_markov_concat=False):
+                 vis_mode='synthetic', concat_steps=0):
         self.sess = sess
         self.clip = clip
         self.env_a = env_a
@@ -54,14 +54,15 @@ class CycleGAIL(object):
         self.use_orac_loss = use_orac_loss
         self.loss = loss
         self.gamma = gamma
-        self.use_markov_concat = use_markov_concat
+        self.concat_steps = concat_steps
         print('======= Settings =======')
         print('-------- Models --------')
         print('GAN: %s\nclip: %.3f\nG lambda %.3f\nF lambda %.3f\n'
               'Loss metric: %s\nUse oloss: %s\nGamma: %.3f\nF Hidden size: '
-              '%d\nG Hidden size: %d\nD Hidden size: %d'
+              '%d\nG Hidden size: %d\nD Hidden size: %d\nConcat steps %d'
               % (loss, clip, lambda_g, lambda_f, metric,
-                 str(use_orac_loss), gamma, hidden_f, hidden_g, hidden_d))
+                 str(use_orac_loss), gamma, hidden_f, hidden_g, hidden_d,
+                 concat_steps))
         print('----- Environments -----')
         print('Domain A Obs: %d\nDomain A Act: %d\nDomain B Obs: %d\n'
               'Domain B Act: %d\n'
@@ -72,9 +73,13 @@ class CycleGAIL(object):
         print('CycleGAIL: Build graph finished !')
 
     def markov_concat(self, current):
-        if not self.use_markov_concat:
-            return current
-        return tf.concat([current[1:, :], current[:-1, :]], axis=1)
+        stacks = []
+        for i in range(self.concat_steps):
+            stacks.append(current[i: -self.concat_steps + i, :])
+            #print(current[i: -self.concat_steps + i, :].get_shape())
+        stacks.append(current[self.concat_steps:, :])
+        #print(current[self.concat_steps:, :].get_shape())
+        return tf.concat(stacks, axis=1)
 
     def gradient_penalty(self, name, real, fake):
         alpha = tf.random_uniform([tf.shape(real)[0], 1], 0., 1.)
@@ -87,13 +92,13 @@ class CycleGAIL(object):
         return tf.reduce_mean((slopes - 1) ** 2)
 
     def build_model(self, w_obs_a, w_obs_b, w_act_a, w_act_b):
-        self.real_act_a = tf.placeholder(tf.float32, [None, self.a_act_dim])
-        self.real_act_b = tf.placeholder(tf.float32, [None, self.b_act_dim])
-        self.real_obs_a = tf.placeholder(tf.float32, [None, self.a_obs_dim])
-        self.real_obs_b = tf.placeholder(tf.float32, [None, self.b_obs_dim])
-        self.orac_obs_a = tf.placeholder(tf.float32, [None, self.a_obs_dim])
-        self.orac_obs_b = tf.placeholder(tf.float32, [None, self.b_obs_dim])
-        self.ts = tf.placeholder(tf.float32, [None, 1])
+        self.real_act_a = tf.placeholder(tf.float32, [100, self.a_act_dim])
+        self.real_act_b = tf.placeholder(tf.float32, [100, self.b_act_dim])
+        self.real_obs_a = tf.placeholder(tf.float32, [100, self.a_obs_dim])
+        self.real_obs_b = tf.placeholder(tf.float32, [100, self.b_obs_dim])
+        self.orac_obs_a = tf.placeholder(tf.float32, [100, self.a_obs_dim])
+        self.orac_obs_b = tf.placeholder(tf.float32, [100, self.b_obs_dim])
+        self.ts = tf.placeholder(tf.float32, [100, 1])
 
         self.fake_act_a = self.gen_net('g_a', self.real_act_b, self.a_act_dim)
         self.fake_act_b = self.gen_net('g_b', self.real_act_a, self.b_act_dim)
