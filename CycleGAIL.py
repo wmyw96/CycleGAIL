@@ -25,7 +25,7 @@ def relu_layer(name, n_in, n_out, inputs):
 
 
 class CycleGAIL(object):
-    def __init__(self, name, sess, clip, env_a, env_b,
+    def __init__(self, name, args, clip, env_a, env_b,
                  a_act_dim, b_act_dim, a_obs_dim, b_obs_dim,
                  hidden_f, hidden_g, hidden_d,
                  w_obs_a, w_obs_b, w_act_a, w_act_b,
@@ -73,7 +73,7 @@ class CycleGAIL(object):
 
         print('CycleGAIL: Start building graph ...')
         with self.graph.as_default():
-            self.build_model(w_obs_a, w_obs_b, w_act_a, w_act_b)
+            self.build_model(w_obs_a, w_obs_b, w_act_a, w_act_b, args)
         print('CycleGAIL: Build graph finished !')
 
     def markov_concat(self, current):
@@ -93,15 +93,11 @@ class CycleGAIL(object):
                                        reduction_indices=[1]))
         return tf.reduce_mean((slopes - 1) ** 2)
 
-    def build_model(self, w_obs_a, w_obs_b, w_act_a, w_act_b):
-        self.real_act_a = tf.placeholder(tf.float32, [None, self.a_act_dim],
-                                         name='real_act_a')
-        self.real_act_b = tf.placeholder(tf.float32, [None, self.b_act_dim],
-                                         name='real_act_b')
-        self.real_obs_a = tf.placeholder(tf.float32, [None, self.a_obs_dim],
-                                         name='real_obs_a')
-        self.real_obs_b = tf.placeholder(tf.float32, [None, self.b_obs_dim],
-                                         name='real_obs_b')
+    def build_model(self, w_obs_a, w_obs_b, w_act_a, w_act_b, args):
+        self.real_act_a = tf.placeholder(tf.float32, [None, self.a_act_dim])
+        self.real_act_b = tf.placeholder(tf.float32, [None, self.b_act_dim])
+        self.real_obs_a = tf.placeholder(tf.float32, [None, self.a_obs_dim])
+        self.real_obs_b = tf.placeholder(tf.float32, [None, self.b_obs_dim])
         self.orac_obs_a = tf.placeholder(tf.float32, [None, self.a_obs_dim])
         self.orac_obs_b = tf.placeholder(tf.float32, [None, self.b_obs_dim])
         self.ts = tf.placeholder(tf.float32, [None, 1])
@@ -175,6 +171,59 @@ class CycleGAIL(object):
         self.params_f = self.params_f_a + self.params_f_b
         self.params_gf = self.params_f + self.params_g
         self.saver = tf.train.Saver()
+
+        # training
+        if self.loss == 'wgan':
+            # lr = 5e-5
+            self.d_opt = \
+                tf.train.RMSPropOptimizer(args.lr).\
+                    minimize(self.loss_d, var_list=self.params_d)
+            if len(self.params_g) > 0:
+                self.g_opt = \
+                    tf.train.RMSPropOptimizer(args.lr).\
+                        minimize(self.loss_g, var_list=self.params_g)
+            else:
+                self.g_opt = tf.no_opt()
+            if len(self.params_f) > 0:
+                self.f_opt = \
+                    tf.train.RMSPropOptimizer(args.lr).\
+                        minimize(self.loss_f, var_list=self.params_f)
+            else:
+                self.f_opt = tf.no_op()
+            self.clip_d = self.clip_trainable_params(self.params_d)
+            self.gf_opt = \
+                tf.train.RMSPropOptimizer(args.lr).\
+                    minimize(self.loss_gf, var_list=self.params_gf)
+        else:
+            self.d_opt = \
+                tf.train.AdamOptimizer(args.lr, beta1=0.5, beta2=0.9).\
+                    minimize(self.loss_d, var_list=self.params_d)
+            if len(self.params_g) > 0:
+                self.g_opt = \
+                    tf.train.AdamOptimizer(args.lr, beta1=0.5, beta2=0.9).\
+                        minimize(self.loss_g, var_list=self.params_g)
+            else:
+                self.g_opt = tf.no_opt()
+            if len(self.params_f) > 0:
+                self.f_opt = \
+                    tf.train.AdamOptimizer(args.lr, beta1=0.5, beta2=0.9).\
+                        minimize(self.loss_f, var_list=self.params_f)
+            else:
+                self.f_opt = tf.no_op()
+            self.gf_opt = \
+                tf.train.AdamOptimizer(args.lr, beta1=0.5, beta2=0.9).\
+                minimize(self.loss_gf, var_list=self.params_gf)
+        self.init = tf.global_variables_initializer()
+
+        # summary
+        tf.summary.scalar('d loss', self.loss_d)
+        tf.summary.scalar('g loss', self.loss_g)
+        tf.summary.scalar('f loss', self.loss_f)
+        tf.summary.scalar('weierstrass distance', self.wdist)
+
+        self.merged = tf.summary.merge_all()
+        self.writer = tf.summary.FileWriter('./logs/' + self.dir_name,
+                                            self.sess.graph)
 
     def gen_net(self, prefix, inp, out_dim):
         pre_dim = int(inp.get_shape()[-1])
@@ -268,62 +317,15 @@ class CycleGAIL(object):
         # data: numpy, [N x n_x]
 
         print(self.loss)
+        print(self.loss_d)
 
-        if self.loss == 'wgan':
-            # lr = 5e-5
-            self.d_opt = \
-                tf.train.RMSPropOptimizer(args.lr).\
-                    minimize(self.loss_d, var_list=self.params_d)
-            if len(self.params_g) > 0:
-                self.g_opt = \
-                    tf.train.RMSPropOptimizer(args.lr).\
-                        minimize(self.loss_g, var_list=self.params_g)
-            else:
-                self.g_opt = tf.no_opt()
-            if len(self.params_f) > 0:
-                self.f_opt = \
-                    tf.train.RMSPropOptimizer(args.lr).\
-                        minimize(self.loss_f, var_list=self.params_f)
-            else:
-                self.f_opt = tf.no_op()
-            self.clip_d = self.clip_trainable_params(self.params_d)
-            self.gf_opt = \
-                tf.train.RMSPropOptimizer(args.lr).\
-                    minimize(self.loss_gf, var_list=self.params_gf)
-        else:
-            self.d_opt = \
-                tf.train.AdamOptimizer(args.lr, beta1=0.5, beta2=0.9).\
-                    minimize(self.loss_d, var_list=self.params_d)
-            if len(self.params_g) > 0:
-                self.g_opt = \
-                    tf.train.AdamOptimizer(args.lr, beta1=0.5, beta2=0.9).\
-                        minimize(self.loss_g, var_list=self.params_g)
-            else:
-                self.g_opt = tf.no_opt()
-            if len(self.params_f) > 0:
-                self.f_opt = \
-                    tf.train.AdamOptimizer(args.lr, beta1=0.5, beta2=0.9).\
-                        minimize(self.loss_f, var_list=self.params_f)
-            else:
-                self.f_opt = tf.no_op()
-            self.gf_opt = \
-                tf.train.AdamOptimizer(args.lr, beta1=0.5, beta2=0.9).\
-                minimize(self.loss_gf, var_list=self.params_gf)
         self.show_params('generator g', self.params_g)
         self.show_params('generator f', self.params_f)
         self.show_params('discriminator d', self.params_d)
 
         # clip=0.01
-        tf.global_variables_initializer().run()
+        self.sess.run(self.init)
 
-        tf.summary.scalar('d loss', self.loss_d)
-        tf.summary.scalar('g loss', self.loss_g)
-        tf.summary.scalar('f loss', self.loss_f)
-        tf.summary.scalar('weierstrass distance', self.wdist)
-
-        merged = tf.summary.merge_all()
-        self.writer = tf.summary.FileWriter('./logs/' + self.dir_name,
-                                            self.sess.graph)
         ls_ds = []
         ls_gs = []
         ls_fs = []
@@ -347,7 +349,7 @@ class CycleGAIL(object):
             # add summary
             demos = self.get_demo(expert_a, expert_b)
             # demos, _, __ = self.get_oracle(demos)
-            summary = self.sess.run(merged, demos)
+            summary = self.sess.run(self.merged, demos)
             self.writer.add_summary(summary, epoch_idx)
 
             for i in range(n_c):

@@ -91,7 +91,7 @@ except:
     enva = envb = None
 print('Load data finished !')
 
-model = CycleGAIL(args.name, None, args.clip, enva, envb,
+model = CycleGAIL(args.name, args, args.clip, enva, envb,
                       6, 6, 18, 18, args.nhidf, args.nhidg, args.nhidd,
                       demos_a.obs_scalar, demos_b.obs_scalar,
                       demos_a.act_scalar, demos_b.act_scalar,

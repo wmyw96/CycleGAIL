@@ -26,6 +26,7 @@ class Demonstrations(object):
         self.obs_bias = None
 
     def add_demo(self, state, action):
+        action = action.squeeze()
         self.demos.append((state, action))
         self.pointer = len(self.demos)
 
