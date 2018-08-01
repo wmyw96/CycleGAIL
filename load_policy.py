@@ -1,5 +1,6 @@
 import pickle, tensorflow as tf, tf_util, numpy as np
 
+
 def load_policy(filename):
     with open(filename, 'rb') as f:
         data = pickle.loads(f.read())

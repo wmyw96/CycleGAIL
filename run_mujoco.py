@@ -63,6 +63,9 @@ parser.add_argument('--nd2', dest='nd2', type=int, default=10,
                     help='# of expert 2 trajectoreis for training')
 parser.add_argument('--len', dest='len', type=int, default=300,
                     help='horizon of the trajectory (fixed)')
+"""Demo setting"""
+parser.add_argument('--expert_a', dest='expert_a', type=str, default=None,
+                    help='policy net file of expert a')
 
 np.random.seed(1234)
 tf.set_random_seed(1234)
@@ -88,8 +91,7 @@ except:
     enva = envb = None
 print('Load data finished !')
 
-with tf.Session() as sess:
-    model = CycleGAIL(args.name, sess, args.clip, enva, envb,
+model = CycleGAIL(args.name, None, args.clip, enva, envb,
                       6, 6, 18, 18, args.nhidf, args.nhidg, args.nhidd,
                       demos_a.obs_scalar, demos_b.obs_scalar,
                       demos_a.act_scalar, demos_b.act_scalar,
@@ -102,14 +104,43 @@ with tf.Session() as sess:
                       loss=args.loss,
                       vis_mode='mujoco',
                       concat_steps=args.markov)
-    print('Training Process:')
-    if args.mode == 'train':
-        model.train(args, demos_a, demos_b, False, args.ckdir)
-    else:
-        model.evaluation(demos_a, demos_b, args.ckdir)
+print('Training Process:')
+if args.mode == 'train':
+    model.train(args, demos_a, demos_b, False, args.ckdir)
+else:
+    model.link_demo(demos_a, demos_b)
+    model.load(args.ckdir)
+    #model.evaluation(demos_a, demos_b, args.ckdir)
+
+    # test a->b trans
+
+    from policy_net import MlpPolicy
+    envb.reset()
+    obs_b = np.concatenate([envb.env.model.data.qpos,
+                            envb.env.model.data.qvel]).reshape(-1)
+    done = False
+    total_rd = 0.0
+    while not done:
+        obs_a, _ = model.run_trans('b2a', obs=obs_b)
+        policy_obs_a = obs_a.reshape(-1)[1:]
+
+        policy = MlpPolicy(args.expert_a)
+        act_a = policy.run(policy_obs_a)
+
+        _, act_b = model.run_trans('a2b', act=act_a)
+        _1, rd, done, _ = envb.step(act_b)
+        obs_b = np.concatenate([envb.env.model.data.qpos,
+                                envb.env.model.data.qvel]).reshape(-1)
+        envb.render()
+        total_rd += rd
+    print('Total reward = %d\n' % total_rd)
+
 
 
 '''
+Demo:
+
+
 Recommended command:
 python run_mujoco.py --name logs/halfcheetah-ident --lr 0.0001 --nhidd 256 --nhidf 54 --nhidg 18 --loss_metric L2 --epoch 100000 --ntraj 100 --lf 1.0 --lg 1.0 --loss wgan-gp --nd1 50 --nd2 50 --enva HalfCheetah-v1 --envb HalfCheetah-v1 --ckdir model --mode test
 python run_mujoco.py --name logs/halfcheetah-ident --lr 0.0001 --nhidd 256 --nhidf 54 --nhidg 18 --loss_metric L2 --epoch 100000 --ntraj 100 --lf 1.0 --lg 1.0 --loss wgan-gp --nd1 90 --nd2 90 --enva HalfCheetah-v1 --envb HalfCheetah-v1 --ckdir model

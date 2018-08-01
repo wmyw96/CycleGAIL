@@ -148,3 +148,9 @@ class Demonstrations(object):
 
     def obs_r(self, acts):
         return acts * self.obs_scalar + self.obs_bias
+
+    def act_n(self, acts):
+        return (acts - self.act_bias) / self.act_scalar
+
+    def obs_n(self, obs):
+        return (obs - self.obs_bias) / self.obs_scalar

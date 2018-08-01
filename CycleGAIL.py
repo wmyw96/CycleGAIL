@@ -32,7 +32,8 @@ class CycleGAIL(object):
                  lambda_g, lambda_f, gamma, use_orac_loss, metric='L1',
                  checkpoint_dir=None, spect=True, loss='wgan',
                  vis_mode='synthetic', concat_steps=0):
-        self.sess = sess
+        self.graph = tf.Graph()
+        self.sess = tf.Session(graph=self.graph)
         self.clip = clip
         self.env_a = env_a
         self.env_b = env_b
@@ -55,6 +56,8 @@ class CycleGAIL(object):
         self.loss = loss
         self.gamma = gamma
         self.concat_steps = concat_steps
+        self.expert_a = None
+        self.expert_b = None
         print('======= Settings =======')
         print('-------- Models --------')
         print('GAN: %s\nclip: %.3f\nG lambda %.3f\nF lambda %.3f\n'
@@ -69,16 +72,15 @@ class CycleGAIL(object):
               % (a_obs_dim, a_act_dim, b_obs_dim, b_act_dim))
 
         print('CycleGAIL: Start building graph ...')
-        self.build_model(w_obs_a, w_obs_b, w_act_a, w_act_b)
+        with self.graph.as_default():
+            self.build_model(w_obs_a, w_obs_b, w_act_a, w_act_b)
         print('CycleGAIL: Build graph finished !')
 
     def markov_concat(self, current):
         stacks = []
         for i in range(self.concat_steps):
             stacks.append(current[i: -self.concat_steps + i, :])
-            #print(current[i: -self.concat_steps + i, :].get_shape())
         stacks.append(current[self.concat_steps:, :])
-        #print(current[self.concat_steps:, :].get_shape())
         return tf.concat(stacks, axis=1)
 
     def gradient_penalty(self, name, real, fake):
@@ -92,10 +94,14 @@ class CycleGAIL(object):
         return tf.reduce_mean((slopes - 1) ** 2)
 
     def build_model(self, w_obs_a, w_obs_b, w_act_a, w_act_b):
-        self.real_act_a = tf.placeholder(tf.float32, [None, self.a_act_dim])
-        self.real_act_b = tf.placeholder(tf.float32, [None, self.b_act_dim])
-        self.real_obs_a = tf.placeholder(tf.float32, [None, self.a_obs_dim])
-        self.real_obs_b = tf.placeholder(tf.float32, [None, self.b_obs_dim])
+        self.real_act_a = tf.placeholder(tf.float32, [None, self.a_act_dim],
+                                         name='real_act_a')
+        self.real_act_b = tf.placeholder(tf.float32, [None, self.b_act_dim],
+                                         name='real_act_b')
+        self.real_obs_a = tf.placeholder(tf.float32, [None, self.a_obs_dim],
+                                         name='real_obs_a')
+        self.real_obs_b = tf.placeholder(tf.float32, [None, self.b_obs_dim],
+                                         name='real_obs_b')
         self.orac_obs_a = tf.placeholder(tf.float32, [None, self.a_obs_dim])
         self.orac_obs_b = tf.placeholder(tf.float32, [None, self.b_obs_dim])
         self.ts = tf.placeholder(tf.float32, [None, 1])
@@ -184,7 +190,7 @@ class CycleGAIL(object):
             hidden = self.hidden_g
         out = relu_layer(prefix + '.1', pre_dim, hidden, inp)
         out = relu_layer(prefix + '.2', hidden, hidden, out)
-        out = relu_layer(prefix + '.3', hidden, hidden, out)
+        #out = relu_layer(prefix + '.3', hidden, hidden, out)
         out = lib.ops.linear.Linear(prefix + '.4', hidden, out_dim, out)
         return out
 
@@ -192,7 +198,7 @@ class CycleGAIL(object):
         pre_dim = int(inp.get_shape()[-1])
         out = relu_layer(prefix + '.1', pre_dim, self.hidden_d, inp)
         out = relu_layer(prefix + '.2', self.hidden_d, self.hidden_d, out)
-        out = relu_layer(prefix + '.3', self.hidden_d, self.hidden_d, out)
+        #out = relu_layer(prefix + '.3', self.hidden_d, self.hidden_d, out)
         out = lib.ops.linear.Linear(prefix + '.4', self.hidden_d, 1, out)
         return out
 
@@ -523,3 +529,49 @@ class CycleGAIL(object):
         self.saver.save(self.sess,
                         os.path.join(checkpoint_dir, model_name),
                         global_step=step)
+
+    def link_demo(self, expert_a, expert_b):
+        self.expert_a = expert_a
+        self.expert_b = expert_b
+
+    def run_trans(self, direction, obs=None, act=None, need_normalize=True):
+        obs_t = None
+        act_t = None
+        if self.expert_a is None or self.expert_b is None:
+            raise ValueError('Please link expert demonstrations first '
+                             'using \'link_demo()\' method')
+        if direction == 'a2b':
+            if obs is not None:
+                obs = np.array(obs).reshape(1, -1)
+                if need_normalize:
+                    obs = self.expert_a.obs_n(obs)
+                obs_t = self.sess.run(self.fake_obs_b,
+                                      feed_dict={self.real_obs_a: obs})
+                if need_normalize:
+                    obs_t = self.expert_b.obs_r(obs_t)
+            if act is not None:
+                act = np.array(act).reshape(1, -1)
+                if need_normalize:
+                    act = self.expert_a.act_n(act)
+                act_t = self.sess.run(self.fake_act_b,
+                                      feed_dict={self.real_act_a: act})
+                if need_normalize:
+                    act_t = self.expert_b.act_r(act_t)
+        else:
+            if obs is not None:
+                obs = np.array(obs).reshape(1, -1)
+                if need_normalize:
+                    obs = self.expert_b.obs_n(obs)
+                obs_t = self.sess.run(self.fake_obs_a,
+                                      feed_dict={self.real_obs_b: obs})
+                if need_normalize:
+                    obs_t = self.expert_a.obs_r(obs_t)
+            if act is not None:
+                act = np.array(act).reshape(1, -1)
+                if need_normalize:
+                    act = self.expert_b.act_n(act)
+                act_t = self.sess.run(self.fake_act_a,
+                                      feed_dict={self.real_act_b: act})
+                if need_normalize:
+                    act_t = self.expert_a.act_r(act_t)
+        return obs_t, act_t
