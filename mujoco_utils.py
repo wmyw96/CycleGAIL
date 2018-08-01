@@ -28,7 +28,7 @@ def show_animate_trajectory(env, obs, acts, animate=False):
         #                  np.clip(obs[i, qpos_dim:], -10, 10)])
         # print(state)
         clip =  obs[i, 1:]
-        #err += np.sum((state - clip) * (state - clip))
+        err += np.sum((state - clip) * (state - clip))
         if animate:
             env.render()
         nxt_state, rd, __, ___ = env.step(acts[i])
@@ -88,15 +88,15 @@ def save_video(file_prefix, num_items):
 
 if __name__ == '__main__':
     np.random.seed(1234)
-    env_name = 'Swimmer-v1'
-    #env_name = 'HalfCheetah-v1'
+    #env_name = 'Swimmer-v1'
+    env_name = 'HalfCheetah-v1'
     #env_name = 'Walker2d-v1'
-    env_name = 'Ant-v1'
+    #env_name = 'Ant-v1'
     #env_name = 'Humanoid-v1'
     demos = Demonstrations(1, 34, 23, 1000000007)
-    demos.load('data/' + env_name, 100)
-    demos.set(50)
-    obss, acts = demos.next_demo()
+    demos.load('data/' + env_name, 10)
+    demos.set(5)
+    obss, acts, ts = demos.next_demo(normalize=False)
     #obss, acts = demos.next_demo()
     env = gym.make(env_name)
     show_animate_trajectory(env, obss, acts, True)

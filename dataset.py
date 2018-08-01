@@ -95,13 +95,16 @@ class Demonstrations(object):
             np.save(file_name + 'traj%d_obs.npy' % i, state)
             np.save(file_name + 'traj%d_act.npy' % i, action)
 
-    def next_demo(self, train=True):
+    def next_demo(self, train=True, normalize=True):
         obs, act = self._next_demo(train)
         #return obs, act
-        return (obs - self.obs_bias) / self.obs_scalar, \
-               (act - self.act_bias) / self.act_scalar, \
-               (np.array(range(obs.shape[0]), dtype=np.float32) /
-                float(obs.shape[0])).reshape((-1, 1))
+        if normalize:
+            return (obs - self.obs_bias) / self.obs_scalar, \
+                   (act - self.act_bias) / self.act_scalar, \
+                   (np.array(range(obs.shape[0]), dtype=np.float32) /
+                    float(obs.shape[0])).reshape((-1, 1))
+        else:
+            return obs, act, np.array(range(obs.shape[0]))
         #return obs[:100, :], act[:100, :]
         #return obs[900:1000, :], act[900:1000, :]
 
