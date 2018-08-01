@@ -92,13 +92,13 @@ class CycleGAIL(object):
         return tf.reduce_mean((slopes - 1) ** 2)
 
     def build_model(self, w_obs_a, w_obs_b, w_act_a, w_act_b):
-        self.real_act_a = tf.placeholder(tf.float32, [100, self.a_act_dim])
-        self.real_act_b = tf.placeholder(tf.float32, [100, self.b_act_dim])
-        self.real_obs_a = tf.placeholder(tf.float32, [100, self.a_obs_dim])
-        self.real_obs_b = tf.placeholder(tf.float32, [100, self.b_obs_dim])
-        self.orac_obs_a = tf.placeholder(tf.float32, [100, self.a_obs_dim])
-        self.orac_obs_b = tf.placeholder(tf.float32, [100, self.b_obs_dim])
-        self.ts = tf.placeholder(tf.float32, [100, 1])
+        self.real_act_a = tf.placeholder(tf.float32, [None, self.a_act_dim])
+        self.real_act_b = tf.placeholder(tf.float32, [None, self.b_act_dim])
+        self.real_obs_a = tf.placeholder(tf.float32, [None, self.a_obs_dim])
+        self.real_obs_b = tf.placeholder(tf.float32, [None, self.b_obs_dim])
+        self.orac_obs_a = tf.placeholder(tf.float32, [None, self.a_obs_dim])
+        self.orac_obs_b = tf.placeholder(tf.float32, [None, self.b_obs_dim])
+        self.ts = tf.placeholder(tf.float32, [None, 1])
 
         self.fake_act_a = self.gen_net('g_a', self.real_act_b, self.a_act_dim)
         self.fake_act_b = self.gen_net('g_b', self.real_act_a, self.b_act_dim)
