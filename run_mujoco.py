@@ -66,14 +66,43 @@ parser.add_argument('--len', dest='len', type=int, default=300,
 """Demo setting"""
 parser.add_argument('--expert_a', dest='expert_a', type=str, default=None,
                     help='policy net file of expert a')
+parser.add_argument('--expert_b', dest='expert_b', type=str, default=None,
+                    help='policy net file of expert a')
 
 np.random.seed(1234)
 tf.set_random_seed(1234)
 
+
+def walker2d_mask(x):
+    qpos_dim = 9
+    return np.concatenate([x[:, 1:qpos_dim],
+                           np.clip(x[:, qpos_dim:], -10, 10)], axis=1)
+
+
+def halfcheetah_mask(x):
+    return x[:, 1:]
+
+
+def identity_mask(x):
+    return x
+
+
 args = parser.parse_args()
 
-demos_a = Demonstrations(1, 34, 23, 1000000007)
-demos_b = Demonstrations(1, 23, 34, 1000000009)
+
+mask_a = identity_mask
+if args.enva == 'HalfCheetah-v1':
+    mask_a = halfcheetah_mask
+if args.enva == 'Walker2d-v1':
+    mask_a = walker2d_mask
+mask_b = identity_mask
+if args.envb == 'HalfCheetah-v1':
+    mask_b = halfcheetah_mask
+if args.envb == 'Walker2d-v1':
+    mask_b = walker2d_mask
+
+demos_a = Demonstrations(1, 34, 23, 1000000007, mask_a)
+demos_b = Demonstrations(1, 23, 34, 1000000009, mask_b)
 print('Init')
 print('Load data : Expert #1 Demonstrations')
 demos_a.load('data/' + args.enva, args.ntraj)
@@ -92,18 +121,20 @@ except:
 print('Load data finished !')
 
 model = CycleGAIL(args.name, args, args.clip, enva, envb,
-                      6, 6, 18, 18, args.nhidf, args.nhidg, args.nhidd,
-                      demos_a.obs_scalar, demos_b.obs_scalar,
-                      demos_a.act_scalar, demos_b.act_scalar,
-                      lambda_g=args.lambda_g,
-                      lambda_f=args.lambda_f,
-                      gamma=args.gamma,
-                      use_orac_loss=False,
-                      metric=args.loss_metric,
-                      checkpoint_dir=None,
-                      loss=args.loss,
-                      vis_mode='mujoco',
-                      concat_steps=args.markov)
+                  demos_a.act_dim, demos_b.act_dim,
+                  demos_a.obs_dim, demos_b.obs_dim,
+                  args.nhidf, args.nhidg, args.nhidd,
+                  demos_a.obs_scalar, demos_b.obs_scalar,
+                  demos_a.act_scalar, demos_b.act_scalar,
+                  lambda_g=args.lambda_g,
+                  lambda_f=args.lambda_f,
+                  gamma=args.gamma,
+                  use_orac_loss=False,
+                  metric=args.loss_metric,
+                  checkpoint_dir=None,
+                  loss=args.loss,
+                  vis_mode='mujoco',
+                  concat_steps=args.markov)
 print('Training Process:')
 if args.mode == 'train':
     model.train(args, demos_a, demos_b, False, args.ckdir)
@@ -131,10 +162,15 @@ else:
         _1, rd, done, _ = envb.step(act_b)
         obs_b = np.concatenate([envb.env.model.data.qpos,
                                 envb.env.model.data.qvel]).reshape(-1)
-        envb.render()
+        #envb.render()
         total_rd += rd
     print('Total reward = %d\n' % total_rd)
 
+    from evaluation import run_policy_evaluation
+
+    print('Evaluation a->b')
+    run_policy_evaluation(100, envb, model, args.expert_a)
+    run_policy_evaluation(100, enva, model, args.expert_b)
 
 
 '''

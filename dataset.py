@@ -3,7 +3,7 @@ import os
 
 
 class Demonstrations(object):
-    def __init__(self, seed, a, b, mod):
+    def __init__(self, seed, a, b, mod, obs_mask=None):
         self.seed = seed
         self.seed_a = a
         self.seed_b = b
@@ -24,9 +24,15 @@ class Demonstrations(object):
         self.act_bias = None
         self.obs_scalar = None
         self.obs_bias = None
+        self.act_dim = 0
+        self.obs_dim = 0
+        self.obs_mask = obs_mask
 
     def add_demo(self, state, action):
+        self.obs_dim = self.obs_mask(state).shape[1]
+        state = self.obs_mask(state)
         action = action.squeeze()
+        self.act_dim = action.shape[1]
         self.demos.append((state, action))
         self.pointer = len(self.demos)
 
