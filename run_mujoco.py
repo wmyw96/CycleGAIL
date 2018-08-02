@@ -89,7 +89,7 @@ def identity_mask(x):
 
 args = parser.parse_args()
 
-
+'''
 mask_a = identity_mask
 if args.enva == 'HalfCheetah-v1':
     mask_a = halfcheetah_mask
@@ -99,10 +99,10 @@ mask_b = identity_mask
 if args.envb == 'HalfCheetah-v1':
     mask_b = halfcheetah_mask
 if args.envb == 'Walker2d-v1':
-    mask_b = walker2d_mask
+    mask_b = walker2d_mask'''
 
-demos_a = Demonstrations(1, 34, 23, 1000000007, mask_a)
-demos_b = Demonstrations(1, 23, 34, 1000000009, mask_b)
+demos_a = Demonstrations(1, 34, 23, 1000000007)
+demos_b = Demonstrations(1, 23, 34, 1000000009)
 print('Init')
 print('Load data : Expert #1 Demonstrations')
 demos_a.load('data/' + args.enva, args.ntraj)
@@ -146,29 +146,25 @@ else:
     # test a->b trans
 
     from policy_net import MlpPolicy
-    envb.reset()
-    obs_b = np.concatenate([envb.env.model.data.qpos,
-                            envb.env.model.data.qvel]).reshape(-1)
+    obs_b = envb.reset()
     done = False
     total_rd = 0.0
     while not done:
         obs_a, _ = model.run_trans('b2a', obs=obs_b)
-        policy_obs_a = obs_a.reshape(-1)[1:]
+        policy_obs_a = obs_a.reshape(-1)
 
         policy = MlpPolicy(args.expert_a)
         act_a = policy.run(policy_obs_a)
 
         _, act_b = model.run_trans('a2b', act=act_a)
-        _1, rd, done, _ = envb.step(act_b)
-        obs_b = np.concatenate([envb.env.model.data.qpos,
-                                envb.env.model.data.qvel]).reshape(-1)
-        #envb.render()
+        obs_b, rd, done, _ = envb.step(act_b)
+        envb.render()
         total_rd += rd
     print('Total reward = %d\n' % total_rd)
 
     from evaluation import run_policy_evaluation
 
-    print('Evaluation a->b')
+    #print('Evaluation a->b')
     run_policy_evaluation(100, envb, model, args.expert_a)
     run_policy_evaluation(100, enva, model, args.expert_b)
 

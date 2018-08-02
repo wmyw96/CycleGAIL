@@ -29,9 +29,10 @@ class Demonstrations(object):
         self.obs_mask = obs_mask
 
     def add_demo(self, state, action):
-        self.obs_dim = self.obs_mask(state).shape[1]
-        state = self.obs_mask(state)
-        action = action.squeeze()
+        state = np.array(state)
+        action = np.array(action)
+        #print(state.shape, action.shape)
+        self.obs_dim = state.shape[1]
         self.act_dim = action.shape[1]
         self.demos.append((state, action))
         self.pointer = len(self.demos)
@@ -147,8 +148,10 @@ class Demonstrations(object):
         act_full = np.concatenate(act_full, 0)
         self.obs_bias = np.mean(obs_full, 0, keepdims=True)
         self.act_bias = np.mean(act_full, 0, keepdims=True)
-        self.obs_scalar = np.sqrt(np.var(obs_full, 0, keepdims=True))
-        self.act_scalar = np.sqrt(np.var(act_full, 0, keepdims=True))
+        self.obs_scalar = np.sqrt(np.var(obs_full, 0, keepdims=True)) + 1e-6
+        self.act_scalar = np.sqrt(np.var(act_full, 0, keepdims=True)) + 1e-6
+        print(self.obs_scalar)
+        print(self.act_scalar)
 
     def act_r(self, acts):
         return acts * self.act_scalar + self.act_bias

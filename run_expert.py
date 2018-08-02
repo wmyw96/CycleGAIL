@@ -44,7 +44,8 @@ def main():
         actions = []
         demos = Demonstrations(1, 34, 23, 1000000007)
 
-        for i in range(args.num_rollouts):
+        i = 0
+        while i < args.num_rollouts:
             print('iter', i)
             obs = env.reset()
             done = False
@@ -56,10 +57,8 @@ def main():
                 action = policy_fn(obs[None,:])
                 observations.append(obs)
                 actions.append(action)
-                obs = np.concatenate([env.env.model.data.qpos,
-                                      env.env.model.data.qvel]).reshape(-1)
                 obss.append(obs)
-                acts.append(action)
+                acts.append(action.reshape(-1))
                 obs, r, done, _ = env.step(action)
                 totalr += r
                 steps += 1
@@ -68,8 +67,10 @@ def main():
                 if steps % 100 == 0: print("%i/%i"%(steps, max_steps))
                 if steps >= max_steps:
                     break
-            returns.append(totalr)
-            demos.add_demo(obss, acts)
+            if steps == max_steps:
+                returns.append(totalr)
+                demos.add_demo(obss, acts)
+                i += 1
         demos.save('data/' + args.envname)
 
         print('returns', returns)
