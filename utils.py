@@ -22,7 +22,7 @@ def cycle_loss(origin, reconstructed, metric, weight=None):
     if metric == 'L1':
         return tf.reduce_mean(tf.abs(origin - reconstructed) * weight)
     if metric == 'L2':
-        return tf.reduce_mean(tf.square(origin - reconstructed) * weight * weight)
+        return tf.reduce_mean(tf.square(origin - reconstructed))
     raise NotImplementedError
 
 
