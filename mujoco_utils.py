@@ -7,6 +7,7 @@ try:
 except:
     print('Cannot import matplotlib')
 import cv2
+from gym_extensions.continuous import mujoco
 
 
 def show_animate_trajectory(env, obs, acts, animate=False):
@@ -89,13 +90,13 @@ def save_video(file_prefix, num_items):
 if __name__ == '__main__':
     np.random.seed(1234)
     #env_name = 'Swimmer-v1'
-    env_name = 'HalfCheetah-v1'
+    env_name = 'HalfCheetahSmallFoot-v0'
     #env_name = 'Walker2d-v1'
     #env_name = 'Ant-v1'
     #env_name = 'Humanoid-v1'
     demos = Demonstrations(1, 34, 23, 1000000007)
-    demos.load('data/' + env_name, 10)
-    demos.set(5)
+    demos.load('data/' + env_name, 25)
+    demos.set(20)
     obss, acts, ts = demos.next_demo(normalize=False)
     #obss, acts = demos.next_demo()
     env = gym.make(env_name)
