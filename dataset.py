@@ -1,9 +1,10 @@
 import numpy as np
 import os
+from scipy.stats import ortho_group
 
 
 class Demonstrations(object):
-    def __init__(self, seed, a, b, mod, obs_mask=None):
+    def __init__(self, seed, a, b, mod, trans=False):
         self.seed = seed
         self.seed_a = a
         self.seed_b = b
@@ -26,7 +27,9 @@ class Demonstrations(object):
         self.obs_bias = None
         self.act_dim = 0
         self.obs_dim = 0
-        self.obs_mask = obs_mask
+        self.trans = trans
+        self.trans_obs = None
+        self.trans_act = None
 
     def add_demo(self, state, action):
         state = np.array(state)
@@ -89,6 +92,15 @@ class Demonstrations(object):
             state = np.load(file_name + 'traj%d_obs.npy' % i)
             action = np.load(file_name + 'traj%d_act.npy' % i)
             self.add_demo(state, action)
+        if self.trans:
+            self.trans_obs = ortho_group.rvs(dim=self.obs_dim)
+            self.trans_act = ortho_group.rvs(dim=self.act_dim)
+            for i in range(len(self.demos)):
+                self.demos[i][0] *= self.trans_obs
+                self.demos[i][1] *= self.trans_act
+        else:
+            self.trans_obs = np.identity(self.obs_dim)
+            self.trans_act = np.identity(self.act_dim)
         self.normalize()
 
     def save(self, file_name):

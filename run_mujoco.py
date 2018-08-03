@@ -102,12 +102,12 @@ if args.envb == 'Walker2d-v1':
     mask_b = walker2d_mask'''
 
 demos_a = Demonstrations(1, 34, 23, 1000000007)
-demos_b = Demonstrations(1, 23, 34, 1000000009)
+demos_b = Demonstrations(1, 23, 34, 1000000009, trans=True)
 print('Init')
 print('Load data : Expert #1 Demonstrations')
-demos_a.load('data/T_' + args.enva, args.ntraj)
+demos_a.load('data/' + args.enva, args.ntraj)
 print('Load data : Expert #2 Demonstrations')
-demos_b.load('data/T_' + args.envb, args.ntraj)
+demos_b.load('data/' + args.envb, args.ntraj)
 demos_a.set(args.nd1)
 demos_b.set(args.nd2)
 demos_a.set_bz(args.batch_size)
