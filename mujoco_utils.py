@@ -7,7 +7,10 @@ try:
 except:
     print('Cannot import matplotlib')
 import cv2
-from gym_extensions.continuous import mujoco
+try:
+    from gym_extensions.continuous import mujoco
+except:
+    print('unable to import gym_extensions')
 
 
 def show_animate_trajectory(env, obs, acts, animate=False):

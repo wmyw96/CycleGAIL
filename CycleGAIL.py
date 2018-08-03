@@ -8,22 +8,6 @@ import warnings
 from mujoco_utils import *
 
 
-import tflib as lib
-import tflib.ops.linear
-
-
-def relu_layer(name, n_in, n_out, inputs):
-    output = lib.ops.linear.Linear(
-        name+'.Linear',
-        n_in,
-        n_out,
-        inputs,
-        initialization='he'
-    )
-    output = tf.nn.relu(output)
-    return output
-
-
 class CycleGAIL(object):
     def __init__(self, name, args, clip, env_a, env_b,
                  a_act_dim, b_act_dim, a_obs_dim, b_obs_dim,
@@ -102,13 +86,17 @@ class CycleGAIL(object):
         self.orac_obs_b = tf.placeholder(tf.float32, [None, self.b_obs_dim])
         self.ts = tf.placeholder(tf.float32, [None, 1])
 
-        self.fake_act_a = self.gen_net('g_a', self.real_act_b, self.a_act_dim)
-        self.fake_act_b = self.gen_net('g_b', self.real_act_a, self.b_act_dim)
+        self.fake_act_a = \
+            self.gen_net('g_a', self.real_act_b, self.a_act_dim, False)
+        self.fake_act_b = \
+            self.gen_net('g_b', self.real_act_a, self.b_act_dim, False)
         self.inv_act_a = self.gen_net('g_a', self.fake_act_b, self.a_act_dim)
         self.inv_act_b = self.gen_net('g_b', self.fake_act_a, self.b_act_dim)
 
-        self.fake_obs_a = self.gen_net('f_a', self.real_obs_b, self.a_obs_dim)
-        self.fake_obs_b = self.gen_net('f_b', self.real_obs_a, self.b_obs_dim)
+        self.fake_obs_a = \
+            self.gen_net('f_a', self.real_obs_b, self.a_obs_dim, False)
+        self.fake_obs_b = \
+            self.gen_net('f_b', self.real_obs_a, self.b_obs_dim, False)
         self.inv_obs_a = self.gen_net('f_a', self.fake_obs_b, self.a_obs_dim)
         self.inv_obs_b = self.gen_net('f_b', self.fake_obs_a, self.b_obs_dim)
 
@@ -125,8 +113,10 @@ class CycleGAIL(object):
         self.fake_a = tf.concat([self.ts, self.fake_obs_a, self.fake_act_a], 1)
         self.real_b = tf.concat([self.ts, self.real_obs_b, self.real_act_b], 1)
         self.fake_b = tf.concat([self.ts, self.fake_obs_b, self.fake_act_b], 1)
-        self.d_real_a = self.dis_net('d_a', self.markov_concat(self.real_a))
-        self.d_real_b = self.dis_net('d_b', self.markov_concat(self.real_b))
+        self.d_real_a = \
+            self.dis_net('d_a', self.markov_concat(self.real_a), False)
+        self.d_real_b = \
+            self.dis_net('d_b', self.markov_concat(self.real_b), False)
         self.d_fake_a = self.dis_net('d_a', self.markov_concat(self.fake_a))
         self.d_fake_b = self.dis_net('d_b', self.markov_concat(self.fake_b))
 
@@ -160,12 +150,13 @@ class CycleGAIL(object):
         self.loss_best_f = \
             cycle_loss(self.real_obs_a, self.real_obs_b, self.metric, w_obs_a)
 
-        self.params_g_a = lib.params_with_name('g_a')
-        self.params_g_b = lib.params_with_name('g_b')
-        self.params_f_a = lib.params_with_name('f_a')
-        self.params_f_b = lib.params_with_name('f_b')
-        self.params_d_a = lib.params_with_name('d_a')
-        self.params_d_b = lib.params_with_name('d_b')
+        t_vars = tf.trainable_variables()
+        self.params_g_a = [var for var in t_vars if 'g_a' in var.name]
+        self.params_g_b = [var for var in t_vars if 'g_b' in var.name]
+        self.params_f_a = [var for var in t_vars if 'f_a' in var.name]
+        self.params_f_b = [var for var in t_vars if 'f_b' in var.name]
+        self.params_d_a = [var for var in t_vars if 'd_a' in var.name]
+        self.params_d_b = [var for var in t_vars if 'd_b' in var.name]
         self.params_d = self.params_d_a + self.params_d_b
         self.params_g = self.params_g_a + self.params_g_b
         self.params_f = self.params_f_a + self.params_f_b
@@ -203,16 +194,19 @@ class CycleGAIL(object):
                     tf.train.AdamOptimizer(args.lr, beta1=0.5, beta2=0.9).\
                         minimize(self.loss_g, var_list=self.params_g)
             else:
-                self.g_opt = tf.no_opt()
+                self.g_opt = tf.no_op()
             if len(self.params_f) > 0:
                 self.f_opt = \
                     tf.train.AdamOptimizer(args.lr, beta1=0.5, beta2=0.9).\
                         minimize(self.loss_f, var_list=self.params_f)
             else:
                 self.f_opt = tf.no_op()
-            self.gf_opt = \
-                tf.train.AdamOptimizer(args.lr, beta1=0.5, beta2=0.9).\
-                minimize(self.loss_gf, var_list=self.params_gf)
+            if len(self.params_gf) > 0:
+                self.gf_opt = \
+                    tf.train.AdamOptimizer(args.lr, beta1=0.5, beta2=0.9).\
+                    minimize(self.loss_gf, var_list=self.params_gf)
+            else:
+                self.gf_opt = tf.no_op()
         self.init = tf.global_variables_initializer()
 
         # summary
@@ -225,7 +219,7 @@ class CycleGAIL(object):
         self.writer = tf.summary.FileWriter('./logs/' + self.dir_name,
                                             self.sess.graph)
 
-    def gen_net(self, prefix, inp, out_dim):
+    def gen_net(self, prefix, inp, out_dim, reuse=True):
         pre_dim = int(inp.get_shape()[-1])
         # if prefix[0] == 'f':
         #     return inp
@@ -237,18 +231,24 @@ class CycleGAIL(object):
             hidden = self.hidden_f
         else:
             hidden = self.hidden_g
-        out = relu_layer(prefix + '.1', pre_dim, hidden, inp)
-        out = relu_layer(prefix + '.2', hidden, hidden, out)
-        #out = relu_layer(prefix + '.3', hidden, hidden, out)
-        out = lib.ops.linear.Linear(prefix + '.4', hidden, out_dim, out)
+
+        out = tf.layers.dense(inp, hidden, activation=tf.nn.relu,
+                              name=prefix + '.1', reuse=reuse)
+        out = tf.layers.dense(out, hidden, activation=tf.nn.relu,
+                              name=prefix + '.2', reuse=reuse)
+        out = tf.layers.dense(out, out_dim, activation=None,
+                              name=prefix + '.out', reuse=reuse)
         return out
 
-    def dis_net(self, prefix, inp):
+    def dis_net(self, prefix, inp, reuse=True):
         pre_dim = int(inp.get_shape()[-1])
-        out = relu_layer(prefix + '.1', pre_dim, self.hidden_d, inp)
-        out = relu_layer(prefix + '.2', self.hidden_d, self.hidden_d, out)
-        #out = relu_layer(prefix + '.3', self.hidden_d, self.hidden_d, out)
-        out = lib.ops.linear.Linear(prefix + '.4', self.hidden_d, 1, out)
+        hidden = self.hidden_d
+        out = tf.layers.dense(inp, hidden, activation=tf.nn.relu,
+                              name=prefix + '.1', reuse=reuse)
+        out = tf.layers.dense(out, hidden, activation=tf.nn.relu,
+                              name=prefix + '.2', reuse=reuse)
+        out = tf.layers.dense(out, 1, activation=None,
+                              name=prefix + '.out', reuse=reuse)
         return out
 
     def clip_trainable_params(self, params):
@@ -260,7 +260,7 @@ class CycleGAIL(object):
     def show_params(self, name, params):
         print('Training Parameters for %s module' % name)
         for param in params:
-            print(param.name, ': ', param.get_shape())
+            print(param.name + ' : ' + str(param.get_shape()))
 
     def get_demo(self, expert_a, expert_b, is_train=True):
         if is_train:
