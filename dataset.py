@@ -96,8 +96,9 @@ class Demonstrations(object):
             self.trans_obs = ortho_group.rvs(dim=self.obs_dim)
             self.trans_act = ortho_group.rvs(dim=self.act_dim)
             for i in range(len(self.demos)):
-                self.demos[i][0] *= self.trans_obs
-                self.demos[i][1] *= self.trans_act
+                print(self.demos[i][0].shape)
+                self.demos[i] = (np.dot(self.demos[i][0], self.trans_obs),
+                                 np.dot(self.demos[i][1], self.trans_act))
         else:
             self.trans_obs = np.identity(self.obs_dim)
             self.trans_act = np.identity(self.act_dim)
