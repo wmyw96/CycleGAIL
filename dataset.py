@@ -106,6 +106,8 @@ class Demonstrations(object):
     def next_demo(self, train=True, normalize=True):
         obs, act = self._next_demo(train)
         #return obs, act
+        #obs = obs[:100, :]
+        #act = act[:100, :]
         if normalize:
             return (obs - self.obs_bias) / self.obs_scalar, \
                    (act - self.act_bias) / self.act_scalar, \
