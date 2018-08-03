@@ -335,6 +335,7 @@ class CycleGAIL(object):
         wds = []
         ls_igs = []
         ls_ifs = []
+        gps = []
 
         if eval_on:
             self.visual_evaluation(expert_a, expert_b, 0)
@@ -361,11 +362,11 @@ class CycleGAIL(object):
                 ls_ds.append(ls_d)
 
             demos = self.get_demo(expert_a, expert_b)
-            _, ls_g, ls_f, ls_gf, wd, ls_ig, ls_if, ls_bf, ls_bg = \
+            _, ls_g, ls_f, ls_gf, wd, ls_ig, ls_if, ls_bf, ls_bg, gp = \
                 self.sess.run([self.gf_opt, self.loss_g, self.loss_f,
                                self.loss_gf, self.wdist,
                                self.loss_ident_g, self.loss_ident_f,
-                               self.loss_best_f, self.loss_best_g],
+                               self.loss_best_f, self.loss_best_g, self.gp],
                               feed_dict=demos)
             ls_gs.append(ls_g)
             ls_fs.append(ls_f)
@@ -375,6 +376,7 @@ class CycleGAIL(object):
             ls_bfs.append(ls_bf)
             ls_bgs.append(ls_bg)
             wds.append(wd)
+            gps.append(gp)
 
             ls_fs.append(ls_f)
 
@@ -394,6 +396,7 @@ class CycleGAIL(object):
                        float(np.mean(wds)), float(np.mean(ls_gfs)),
                        float(np.mean(ls_igs)), float(np.mean(ls_ifs)),
                        float(np.mean(ls_bgs)), float(np.mean(ls_bfs))))
+                print('Gradient Penalty = %.6f\n' % (float(np.mean(gps))))
                 ls_ds = []
                 ls_gs = []
                 ls_fs = []
@@ -402,6 +405,7 @@ class CycleGAIL(object):
                 ls_ifs = []
                 ls_igs = []
                 ls_bgs, ls_bfs = [], []
+                gps = []
                 start_time = time.time()
 
     def visual_evaluation(self, expert_a, expert_b, id):
