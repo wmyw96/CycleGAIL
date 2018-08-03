@@ -22,7 +22,6 @@ class CycleGAIL(object):
         self.env_a = env_a
         self.env_b = env_b
         self.vis_mode = vis_mode
-
         self.metric = metric
         self.checkpoint_dir = checkpoint_dir
         self.dir_name = name
@@ -57,6 +56,7 @@ class CycleGAIL(object):
 
         print('CycleGAIL: Start building graph ...')
         with self.graph.as_default():
+            tf.set_random_seed(1234)
             self.build_model(w_obs_a, w_obs_b, w_act_a, w_act_b, args)
         print('CycleGAIL: Build graph finished !')
 
