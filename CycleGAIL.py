@@ -231,9 +231,9 @@ class CycleGAIL(object):
         else:
             hidden = self.hidden_g
 
-        out = tf.layers.dense(inp, hidden, activation=tf.nn.relu,
+        out = tf.layers.dense(inp, hidden, activation=tf.nn.tanh,
                               name=prefix + '.1', reuse=reuse)
-        out = tf.layers.dense(out, hidden, activation=tf.nn.relu,
+        out = tf.layers.dense(out, hidden, activation=tf.nn.tanh,
                               name=prefix + '.2', reuse=reuse)
         #out = tf.layers.dense(out, hidden, activation=tf.nn.relu,
         #                      name=prefix + '.3', reuse=reuse)
@@ -248,8 +248,6 @@ class CycleGAIL(object):
                               name=prefix + '.1', reuse=reuse)
         out = tf.layers.dense(out, hidden, activation=tf.nn.relu,
                               name=prefix + '.2', reuse=reuse)
-        out = tf.layers.dense(out, hidden, activation=tf.nn.relu,
-                              name=prefix + '.3', reuse=reuse)
         out = tf.layers.dense(out, 1, activation=None,
                               name=prefix + '.out', reuse=reuse)
         return out
