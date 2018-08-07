@@ -4,7 +4,7 @@ from scipy.stats import ortho_group
 
 
 class Demonstrations(object):
-    def __init__(self, seed, a, b, mod, trans=False):
+    def __init__(self, seed, a, b, mod, trans_obs=None, trans_act=None):
         self.seed = seed
         self.seed_a = a
         self.seed_b = b
@@ -27,9 +27,14 @@ class Demonstrations(object):
         self.obs_bias = None
         self.act_dim = 0
         self.obs_dim = 0
-        self.trans = trans
-        self.trans_obs = None
-        self.trans_act = None
+        if trans_obs is None:
+            self.trans_obs = IdentityTransform()
+        else:
+            self.trans_obs = trans_obs
+        if trans_act is None:
+            self.trans_act = IdentityTransform()
+        else:
+            self.trans_act = trans_act
 
     def add_demo(self, state, action):
         state = np.array(state)
@@ -92,16 +97,11 @@ class Demonstrations(object):
             state = np.load(file_name + 'traj%d_obs.npy' % i)
             action = np.load(file_name + 'traj%d_act.npy' % i)
             self.add_demo(state, action)
-        if self.trans:
-            self.trans_obs = ortho_group.rvs(dim=self.obs_dim)
-            self.trans_act = ortho_group.rvs(dim=self.act_dim)
-            for i in range(len(self.demos)):
-                print(self.demos[i][0].shape)
-                self.demos[i] = (np.dot(self.demos[i][0], self.trans_obs),
-                                 np.dot(self.demos[i][1], self.trans_act))
-        else:
-            self.trans_obs = np.identity(self.obs_dim)
-            self.trans_act = np.identity(self.act_dim)
+
+        for i in range(len(self.demos)):
+            #print(self.demos[i][0].shape)
+            self.demos[i] = (self.trans_obs.run(self.demos[i][0]),
+                             self.trans_act.run(self.demos[i][1]))
         self.normalize()
 
     def save(self, file_name):
@@ -182,3 +182,39 @@ class Demonstrations(object):
 
     def obs_n(self, obs):
         return (obs - self.obs_bias) / self.obs_scalar
+
+
+class LinearTransform(object):
+    def __init__(self, n):
+        self.n = n
+        self.kernel = ortho_group.rvs(dim=self.n)
+        self.bias = np.random.uniform(-1.0, 1.0, (n,))
+
+    def run(self, inp):
+        return np.dot(inp, self.kernel) + self.bias
+
+
+class NonLinearTransform(object):
+    def __init__(self, n, nlayers):
+        self.n = n
+        self.nlayers = nlayers
+        self.kernels = []
+        self.biases = []
+        for i in range(nlayers):
+            self.kernels.append(ortho_group.rvs(dim=n))
+            self.biases.append(np.random.uniform(-1.0, 1.0, (n,)))
+
+    def run(self, inp):
+        out = np.dot(inp, self.kernels[0]) + self.biases[0]
+        for i in range(self.nlayers - 1):
+            out = np.tanh(out)
+            out = np.dot(out, self.kernels[i + 1]) + self.biases[i + 1]
+        return out
+
+
+class IdentityTransform(object):
+    def __init__(self):
+        pass
+
+    def run(self, inp):
+        return inp

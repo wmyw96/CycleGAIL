@@ -5,6 +5,7 @@ import tensorflow as tf
 import gym
 
 from dataset import Demonstrations
+from dataset import IdentityTransform, LinearTransform, NonLinearTransform
 from CycleGAIL import CycleGAIL
 
 parser = argparse.ArgumentParser(description='Argument parser')
@@ -37,6 +38,8 @@ parser.add_argument('--markov', dest='markov', type=int, default=0,
 """Arguments related to run mode"""
 parser.add_argument('--mode', dest='mode', default='train',
                     help='gen, train, test')
+parser.add_argument('--exp', dest='exp', default='identity',
+                    help='experiment type: identity, linear, nonlinear, real')
 
 """Arguments related to training"""
 parser.add_argument('--loss_metric', dest='loss_metric', default='L1',
@@ -63,19 +66,36 @@ parser.add_argument('--nd2', dest='nd2', type=int, default=10,
                     help='# of expert 2 trajectoreis for training')
 parser.add_argument('--len', dest='len', type=int, default=300,
                     help='horizon of the trajectory (fixed)')
+parser.add_argument('--obsdim', dest='obsdim', type=int, default=6,
+                    help='observation space dim (for linear & nonlinear trans)')
+parser.add_argument('--actdim', dest='actdim', type=int, default=17,
+                    help='action space dim (for linear & nonlinear trans)')
 """Demo setting"""
 parser.add_argument('--expert_a', dest='expert_a', type=str, default=None,
                     help='policy net file of expert a')
 parser.add_argument('--expert_b', dest='expert_b', type=str, default=None,
                     help='policy net file of expert a')
 
+
 np.random.seed(1234)
 tf.set_random_seed(1234)
 
 args = parser.parse_args()
 
+trans_obs = None
+trans_act = None
+if args.exp == 'identity':
+    trans_act = IdentityTransform()
+    trans_obs = IdentityTransform()
+if args.exp == 'linear':
+    trans_act = LinearTransform(args.actdim)
+    trans_obs = LinearTransform(args.obsdim)
+if args.exp == 'nonlinear':
+    trans_act = NonLinearTransform(args.actdim, 2)
+    trans_obs = NonLinearTransform(args.obsdim, 2)
+
 demos_a = Demonstrations(1, 34, 23, 1000000007)
-demos_b = Demonstrations(1, 23, 34, 1000000009)
+demos_b = Demonstrations(1, 23, 34, 1000000009, trans_obs, trans_act)
 print('Init')
 print('Load data : Expert #1 Demonstrations')
 demos_a.load('data/' + args.enva, args.ntraj)
@@ -110,7 +130,8 @@ model = CycleGAIL(args.name, args, args.clip, enva, envb,
                   concat_steps=args.markov)
 print('Training Process:')
 if args.mode == 'train':
-    model.train(args, demos_a, demos_b, False, args.ckdir)
+    model.train(args, demos_a, demos_b, False, args.ckdir,
+                trans_obs, trans_act)
 else:
     model.link_demo(demos_a, demos_b)
     model.load(args.ckdir)

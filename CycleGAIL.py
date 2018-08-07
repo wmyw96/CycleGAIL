@@ -279,7 +279,7 @@ class CycleGAIL(object):
 
     # suppose have same horizon H
     def train(self, args, expert_a, expert_b, eval_on=True,
-              ck_dir=None):
+              ck_dir=None, ita2b_obs=None, ita2b_act=None):
         # data: numpy, [N x n_x]
 
         print(self.loss)
@@ -376,6 +376,22 @@ class CycleGAIL(object):
                            float(np.mean(np.square(t_act_b - t_act_b_p)))))
                 t_obs_a_p, t_obs_b_p, t_act_a_p, t_act_b_p = \
                     t_obs_a, t_obs_b, t_act_a, t_act_b
+
+                # ideal mapping
+                if (ita2b_act is not None) and (ita2b_obs is not None):
+                    t_obs_b, t_act_b = \
+                        self.sess.run([self.fake_obs_b, self.fake_act_b],
+                                      feed_dict=demos)
+                    obs_a = demos[self.real_obs_a]
+                    act_a = demos[self.real_act_a]
+                    g_obs_b = ita2b_obs.run(expert_a.obs_r(obs_a))
+                    g_act_b = ita2b_act.run(expert_a.act_r(act_a))
+                    g_obs_b = expert_b.obs_n(g_obs_b)
+                    g_act_b = expert_b.act_n(g_act_b)
+                    error_obs = np.mean(np.square(t_obs_b - g_obs_b))
+                    error_act = np.mean(np.square(t_act_b - g_act_b))
+                    print('MSE error = %.6f (obs), %.6f (act)' %
+                          (float(error_obs), float(error_act)))
 
                 start_time = time.time()
 
