@@ -18,6 +18,7 @@ class CycleGAIL(object):
                  vis_mode='synthetic', concat_steps=0):
         self.graph = tf.Graph()
         self.sess = tf.Session(graph=self.graph)
+
         self.clip = clip
         self.env_a = env_a
         self.env_b = env_b
@@ -41,6 +42,7 @@ class CycleGAIL(object):
         self.concat_steps = concat_steps
         self.expert_a = None
         self.expert_b = None
+        print('FFFFFFFFFFFFFFFFFF')
         print('======= Settings =======')
         print('-------- Models --------')
         print('GAN: %s\nclip: %.3f\nG lambda %.3f\nF lambda %.3f\n'
@@ -60,18 +62,17 @@ class CycleGAIL(object):
             self.build_model(w_obs_a, w_obs_b, w_act_a, w_act_b, args)
         print('CycleGAIL: Build graph finished !')
 
-    def markov_concat(self, current):
+    def markov(self, current):
         stacks = []
         for i in range(self.concat_steps):
             stacks.append(current[i: -self.concat_steps + i, :])
         stacks.append(current[self.concat_steps:, :])
         return tf.concat(stacks, axis=1)
 
-    def gradient_penalty(self, name, real, fake):
+    def graident_penalty(self, name, real, fake):
         alpha = tf.random_uniform([tf.shape(real)[0], 1], 0., 1.)
-
-        hat = alpha * real + ((1 - alpha) * fake)
-        critic_hat_a = self.dis_net(name, self.markov_concat(hat))
+        hat = self.markov(alpha * real + ((1 - alpha) * fake))
+        critic_hat_a = self.dis_net(name, hat)
         gradients = tf.gradients(critic_hat_a, [hat])[0]
         slopes = tf.sqrt(tf.reduce_sum(tf.square(gradients),
                                        reduction_indices=[1]))
@@ -101,33 +102,31 @@ class CycleGAIL(object):
         self.inv_obs_b = self.gen_net('f_b', self.fake_obs_a, self.b_obs_dim)
 
         self.cycle_act_a = \
-            cycle_loss(self.real_act_a, self.inv_act_a, self.metric, w_act_a)
+            cycle_loss(self.real_act_a, self.inv_act_a, self.metric)
         self.cycle_act_b = \
-            cycle_loss(self.real_act_b, self.inv_act_b, self.metric, w_act_b)
+            cycle_loss(self.real_act_b, self.inv_act_b, self.metric)
         self.cycle_obs_a = \
-            cycle_loss(self.real_obs_a, self.inv_obs_a, self.metric, w_obs_a)
+            cycle_loss(self.real_obs_a, self.inv_obs_a, self.metric)
         self.cycle_obs_b = \
-            cycle_loss(self.real_obs_b, self.inv_obs_b, self.metric, w_obs_b)
+            cycle_loss(self.real_obs_b, self.inv_obs_b, self.metric)
 
         self.real_a = tf.concat([self.ts, self.real_obs_a, self.real_act_a], 1)
         self.fake_a = tf.concat([self.ts, self.fake_obs_a, self.fake_act_a], 1)
         self.real_b = tf.concat([self.ts, self.real_obs_b, self.real_act_b], 1)
         self.fake_b = tf.concat([self.ts, self.fake_obs_b, self.fake_act_b], 1)
-        self.d_real_a = \
-            self.dis_net('d_a', self.markov_concat(self.real_a), False)
-        self.d_real_b = \
-            self.dis_net('d_b', self.markov_concat(self.real_b), False)
-        self.d_fake_a = self.dis_net('d_a', self.markov_concat(self.fake_a))
-        self.d_fake_b = self.dis_net('d_b', self.markov_concat(self.fake_b))
+        self.d_real_a = self.dis_net('d_a', self.markov(self.real_a), False)
+        self.d_real_b = self.dis_net('d_b', self.markov(self.real_b), False)
+        self.d_fake_a = self.dis_net('d_a', self.markov(self.fake_a))
+        self.d_fake_b = self.dis_net('d_b', self.markov(self.fake_b))
 
         self.wdist_a = tf.reduce_mean(self.d_real_a - self.d_fake_a)
         self.wdist_b = tf.reduce_mean(self.d_real_b - self.d_fake_b)
         self.wdist = self.wdist_a + self.wdist_b
         self.loss_d = - self.wdist_a - self.wdist_b
         if self.loss == 'wgan-gp':
-            self.gp = self.gradient_penalty('d_a', self.real_a, self.fake_a)
-            self.gp += self.gradient_penalty('d_b', self.real_b, self.fake_b)
-            self.loss_d += self.gp * 10
+            self.gp = self.graident_penalty('d_a', self.real_a, self.fake_a)
+            self.gp += self.graident_penalty('d_b', self.real_b, self.fake_b)
+            self.loss_d += self.gp * self.gamma
         self.loss_gf_a = -tf.reduce_mean(self.d_fake_a)
         self.loss_gf_b = -tf.reduce_mean(self.d_fake_b)
 
@@ -135,6 +134,7 @@ class CycleGAIL(object):
             self.lambda_g * (self.cycle_act_a + self.cycle_act_b)
         self.loss_f = self.loss_gf_a + self.loss_gf_b + \
             self.lambda_f * (self.cycle_obs_a + self.cycle_obs_b)
+
         self.loss_gf = self.loss_gf_a + self.loss_gf_b + \
             self.lambda_g * (self.cycle_act_a + self.cycle_act_b) + \
             self.lambda_f * (self.cycle_obs_a + self.cycle_obs_b)
@@ -163,7 +163,6 @@ class CycleGAIL(object):
         self.params_gf = self.params_f + self.params_g
         self.saver = tf.train.Saver()
 
-        # training
         if self.loss == 'wgan':
             # lr = 5e-5
             self.d_opt = \
@@ -182,9 +181,6 @@ class CycleGAIL(object):
             else:
                 self.f_opt = tf.no_op()
             self.clip_d = self.clip_trainable_params(self.params_d)
-            self.gf_opt = \
-                tf.train.RMSPropOptimizer(args.lr).\
-                    minimize(self.loss_gf, var_list=self.params_gf)
         else:
             self.d_opt = \
                 tf.train.AdamOptimizer(args.lr, beta1=0.5, beta2=0.9).\
@@ -194,7 +190,7 @@ class CycleGAIL(object):
                     tf.train.AdamOptimizer(args.lr, beta1=0.5, beta2=0.9).\
                         minimize(self.loss_g, var_list=self.params_g)
             else:
-                self.g_opt = tf.no_op()
+                self.g_opt = tf.no_opt()
             if len(self.params_f) > 0:
                 self.f_opt = \
                     tf.train.AdamOptimizer(args.lr, beta1=0.5, beta2=0.9).\
@@ -207,14 +203,17 @@ class CycleGAIL(object):
                     minimize(self.loss_gf, var_list=self.params_gf)
             else:
                 self.gf_opt = tf.no_op()
+        self.show_params('generator g', self.params_g)
+        self.show_params('generator f', self.params_f)
+        self.show_params('discriminator d', self.params_d)
+
+        # clip=0.01
         self.init = tf.global_variables_initializer()
 
-        # summary
         tf.summary.scalar('d loss', self.loss_d)
         tf.summary.scalar('g loss', self.loss_g)
         tf.summary.scalar('f loss', self.loss_f)
         tf.summary.scalar('weierstrass distance', self.wdist)
-
         self.merged = tf.summary.merge_all()
         self.writer = tf.summary.FileWriter('./logs/' + self.dir_name,
                                             self.sess.graph)
@@ -236,17 +235,21 @@ class CycleGAIL(object):
                               name=prefix + '.1', reuse=reuse)
         out = tf.layers.dense(out, hidden, activation=tf.nn.relu,
                               name=prefix + '.2', reuse=reuse)
+        #out = tf.layers.dense(out, hidden, activation=tf.nn.relu,
+        #                      name=prefix + '.3', reuse=reuse)
         out = tf.layers.dense(out, out_dim, activation=None,
                               name=prefix + '.out', reuse=reuse)
         return out
 
     def dis_net(self, prefix, inp, reuse=True):
-        pre_dim = int(inp.get_shape()[-1])
         hidden = self.hidden_d
+
         out = tf.layers.dense(inp, hidden, activation=tf.nn.relu,
                               name=prefix + '.1', reuse=reuse)
         out = tf.layers.dense(out, hidden, activation=tf.nn.relu,
                               name=prefix + '.2', reuse=reuse)
+        out = tf.layers.dense(out, hidden, activation=tf.nn.relu,
+                              name=prefix + '.3', reuse=reuse)
         out = tf.layers.dense(out, 1, activation=None,
                               name=prefix + '.out', reuse=reuse)
         return out
@@ -260,56 +263,21 @@ class CycleGAIL(object):
     def show_params(self, name, params):
         print('Training Parameters for %s module' % name)
         for param in params:
-            print(param.name + ' : ' + str(param.get_shape()))
+            print(param.name, ': ', param.get_shape())
 
     def get_demo(self, expert_a, expert_b, is_train=True):
         if is_train:
-            obs_a, act_a, ts = expert_a.next_batch()
-            obs_b, act_b, ts = expert_b.next_batch()
+            obs_a, act_a, _ = expert_a.next_batch()
+            obs_b, act_b, _ = expert_b.next_batch()
         else:
-            obs_a, act_a, ts = expert_a.next_demo(is_train)
-            obs_b, act_b, ts = expert_b.next_demo(is_train)
+            obs_a, act_a, _ = expert_a.next_demo(False)
+            obs_b, act_b, _ = expert_b.next_demo(False)
         demos = {self.real_obs_a: obs_a,
                  self.real_act_a: act_a,
                  self.real_obs_b: obs_b,
                  self.real_act_b: act_b,
-                 self.ts: ts}
+                 self.ts: _}
         return demos
-
-    def local_oracle(self, sobs, sact, tobs_gen, tact_gen, tenv, demos):
-        horizon = sobs.shape[0]
-        obs_dim = tobs_gen.get_shape()[1]
-        obs_orac = np.zeros((horizon, obs_dim))
-        tobs = self.sess.run(tobs_gen, feed_dict=demos)
-        tact = self.sess.run(tact_gen, feed_dict=demos)
-        tenv.reset()
-        tenv.env.set_state(sobs[0, :9], sobs[0, 9:])
-        reward_sum = 0.0
-        for i in range(horizon - 1):
-            # local oracle: unstable
-            # tenv.reset()
-            # tenv.env.set_state(tobs[i, :9], tobs[i, 9:])
-            _1, rd, _2, _3 = tenv.step(tact[i])
-            reward_sum += rd
-            nxt_obs = \
-                np.concatenate([tenv.env.model.data.qpos,
-                                tenv.env.model.data.qvel]).reshape(-1)
-            obs_orac[i + 1, :] = nxt_obs
-        obs_orac[0, :] = sobs[0, :]
-        return obs_orac, reward_sum
-
-    def get_oracle(self, demos):
-        act_a = demos[self.real_act_a]
-        obs_a = demos[self.real_obs_a]
-        act_b = demos[self.real_act_b]
-        obs_b = demos[self.real_obs_b]
-        demos[self.orac_obs_a], rd_a = \
-            self.local_oracle(obs_b, act_b, self.fake_obs_a, self.fake_act_a,
-                              self.env_a, demos)
-        demos[self.orac_obs_b], rd_b = \
-            self.local_oracle(obs_a, act_a, self.fake_obs_b, self.fake_act_b,
-                              self.env_b, demos)
-        return demos, rd_a, rd_b
 
     # suppose have same horizon H
     def train(self, args, expert_a, expert_b, eval_on=True,
@@ -317,29 +285,12 @@ class CycleGAIL(object):
         # data: numpy, [N x n_x]
 
         print(self.loss)
-        print(self.loss_d)
-
-        self.show_params('generator g', self.params_g)
-        self.show_params('generator f', self.params_f)
-        self.show_params('discriminator d', self.params_d)
-
-        # clip=0.01
         self.sess.run(self.init)
 
-        ls_ds = []
-        ls_gs = []
-        ls_fs = []
-        ls_gfs = []
-        ls_bgs = []
-        ls_bfs = []
-        wds = []
-        ls_igs = []
-        ls_ifs = []
-        gps = []
+        ls_ds, ls_gs, ls_fs, wds, ls_ifs, ls_igs, ls_bfs, ls_bgs = \
+            [], [], [], [], [], [], [], []
 
-        if eval_on:
-            self.visual_evaluation(expert_a, expert_b, 0)
-
+        t_obs_b_p, t_act_b_p, t_obs_a_p, t_act_a_p = None, None, None, None
         start_time = time.time()
         for epoch_idx in range(0, args.epoch):
             if epoch_idx % 500 == 0 or epoch_idx < 25:
@@ -349,7 +300,6 @@ class CycleGAIL(object):
 
             # add summary
             demos = self.get_demo(expert_a, expert_b)
-            # demos, _, __ = self.get_oracle(demos)
             summary = self.sess.run(self.merged, demos)
             self.writer.add_summary(summary, epoch_idx)
 
@@ -361,51 +311,74 @@ class CycleGAIL(object):
                     self.sess.run(self.clip_d)
                 ls_ds.append(ls_d)
 
-            demos = self.get_demo(expert_a, expert_b)
-            _, ls_g, ls_f, ls_gf, wd, ls_ig, ls_if, ls_bf, ls_bg, gp = \
-                self.sess.run([self.gf_opt, self.loss_g, self.loss_f,
-                               self.loss_gf, self.wdist,
-                               self.loss_ident_g, self.loss_ident_f,
-                               self.loss_best_f, self.loss_best_g, self.gp],
+            '''demos = self.get_demo(expert_a, expert_b)
+            ls_g, ls_f, ls_if, ls_ig, ls_bf, ls_bg, _, wd = \
+                self.sess.run([self.loss_g, self.loss_f, self.loss_ident_f,
+                               self.loss_ident_g, self.loss_best_f,
+                               self.loss_best_g,
+                               self.gf_opt, self.wdist],
                               feed_dict=demos)
             ls_gs.append(ls_g)
             ls_fs.append(ls_f)
-            ls_gfs.append(ls_gf)
-            ls_igs.append(ls_ig)
+            wds.append(wd)
             ls_ifs.append(ls_if)
+            ls_igs.append(ls_ig)
+            ls_bfs.append(ls_bf)
+            ls_bgs.append(ls_bg)'''
+            demos = self.get_demo(expert_a, expert_b)
+            ls_g, _, wd = self.sess.run([self.loss_g, self.g_opt, self.wdist],
+                                        feed_dict=demos)
+            ls_gs.append(ls_g)
+            wds.append(wd)
+            demos = self.get_demo(expert_a, expert_b)
+            ls_f, _ = self.sess.run([self.loss_f, self.f_opt],
+                                    feed_dict=demos)
+            ls_fs.append(ls_f)
+
+            ls_if, ls_ig, ls_bf, ls_bg = \
+                self.sess.run([self.loss_ident_f,
+                               self.loss_ident_g, self.loss_best_f,
+                               self.loss_best_g],
+                              feed_dict=demos)
+            ls_ifs.append(ls_if)
+            ls_igs.append(ls_ig)
             ls_bfs.append(ls_bf)
             ls_bgs.append(ls_bg)
-            wds.append(wd)
-            gps.append(gp)
-
-            ls_fs.append(ls_f)
 
             if (epoch_idx + 1) % args.log_interval == 0:
                 end_time = time.time()
                 if eval_on:
                     self.visual_evaluation(expert_a, expert_b,
-                                           (epoch_idx + 1) // 100)
+                                           (epoch_idx + 1)//args.log_interval)
                 if ck_dir is not None:
                     self.store(ck_dir, epoch_idx + 1)
                 print('Epoch %d (%.3f s), loss D = %.6f, loss G = %.6f,'
-                      'loss F = %6f, w_dist = %.9f, loss G_F = %.6f, '
-                      'loss ident G = %.6f, loss ident F = %.6f, '
-                      'loss best G = %.6f, loss best F = %.6f' %
+                      'loss F = %6f, w_dist = %.9f, loss ident G = %.6f, '
+                      'loss ident F = %.6f, loss best G = %.6f, '
+                      'loss best F = %.6f' %
                       (epoch_idx, end_time - start_time, float(np.mean(ls_ds)),
                        float(np.mean(ls_gs)), float(np.mean(ls_fs)),
-                       float(np.mean(wds)), float(np.mean(ls_gfs)),
-                       float(np.mean(ls_igs)), float(np.mean(ls_ifs)),
-                       float(np.mean(ls_bgs)), float(np.mean(ls_bfs))))
-                print('Gradient Penalty = %.6f\n' % (float(np.mean(gps))))
-                ls_ds = []
-                ls_gs = []
-                ls_fs = []
-                wds = []
-                ls_gfs = []
-                ls_ifs = []
-                ls_igs = []
-                ls_bgs, ls_bfs = [], []
-                gps = []
+                       float(np.mean(wds)), float(np.mean(ls_igs)),
+                       float(np.mean(ls_ifs)), float(np.mean(ls_bgs)),
+                       float(np.mean(ls_bfs))))
+                ls_ds, ls_gs, ls_fs, wds, ls_ifs, ls_igs, ls_bfs, ls_bgs = \
+                    [], [], [], [], [], [], [], []
+
+                # comparation
+                demos = self.get_demo(expert_a, expert_b, is_train=False)
+                t_obs_a, t_act_a, t_obs_b, t_act_b = \
+                    self.sess.run([self.fake_obs_a, self.fake_act_a,
+                                   self.fake_obs_b, self.fake_act_b],
+                                  feed_dict=demos)
+                if t_obs_a_p is not None:
+                    print('Rd[GF(0), GF(-100)] = %.6f, %.6f, %.6f, %.6f' %
+                          (float(np.mean(np.square(t_obs_a - t_obs_a_p))),
+                           float(np.mean(np.square(t_obs_b - t_obs_b_p))),
+                           float(np.mean(np.square(t_act_a - t_act_a_p))),
+                           float(np.mean(np.square(t_act_b - t_act_b_p)))))
+                t_obs_a_p, t_obs_b_p, t_act_a_p, t_act_b_p = \
+                    t_obs_a, t_obs_b, t_act_a, t_act_b
+
                 start_time = time.time()
 
     def visual_evaluation(self, expert_a, expert_b, id):
@@ -414,13 +387,15 @@ class CycleGAIL(object):
         obs_b, act_b = self.sess.run([self.fake_obs_b, self.fake_act_b],
                                      feed_dict=demos)
         if self.vis_mode == 'synthetic':
-            show_trajectory(self.env_b, obs_b, act_b,
-                            demos[self.real_obs_a][0, :],
-                            self.dir_name + '/img/' + str(id) + 'a2b_T.jpg')
             distribution_diff(demos[self.real_obs_a], demos[self.real_act_b],
                               demos[self.real_obs_b], demos[self.real_act_b],
                               obs_b, act_b,
                               self.dir_name + '/img/' + str(id) + 'a2b_D.jpg')
+            obs_b = expert_b.obs_r(obs_b)
+            act_b = expert_b.act_r(act_b)
+            show_trajectory(self.env_b, obs_b, act_b,
+                            demos[self.real_obs_a][0, :],
+                            self.dir_name + '/img/' + str(id) + 'a2b_T.jpg')
         else:
             prefix = self.dir_name + '/t' + str(id)
             if os.path.isdir(prefix):

@@ -72,37 +72,10 @@ parser.add_argument('--expert_b', dest='expert_b', type=str, default=None,
 np.random.seed(1234)
 tf.set_random_seed(1234)
 
-
-def walker2d_mask(x):
-    qpos_dim = 9
-    return np.concatenate([x[:, 1:qpos_dim],
-                           np.clip(x[:, qpos_dim:], -10, 10)], axis=1)
-
-
-def halfcheetah_mask(x):
-    return x[:, 1:]
-
-
-def identity_mask(x):
-    return x
-
-
 args = parser.parse_args()
 
-'''
-mask_a = identity_mask
-if args.enva == 'HalfCheetah-v1':
-    mask_a = halfcheetah_mask
-if args.enva == 'Walker2d-v1':
-    mask_a = walker2d_mask
-mask_b = identity_mask
-if args.envb == 'HalfCheetah-v1':
-    mask_b = halfcheetah_mask
-if args.envb == 'Walker2d-v1':
-    mask_b = walker2d_mask'''
-
 demos_a = Demonstrations(1, 34, 23, 1000000007)
-demos_b = Demonstrations(1, 23, 34, 1000000009, trans=True)
+demos_b = Demonstrations(1, 23, 34, 1000000009)
 print('Init')
 print('Load data : Expert #1 Demonstrations')
 demos_a.load('data/' + args.enva, args.ntraj)

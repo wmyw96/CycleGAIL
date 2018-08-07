@@ -128,8 +128,6 @@ class Demonstrations(object):
                     float(obs.shape[0])).reshape((-1, 1))
         else:
             return obs, act, np.array(range(obs.shape[0]))
-        #return obs[:100, :], act[:100, :]
-        #return obs[900:1000, :], act[900:1000, :]
 
     def next_batch(self):
         if self.batch_pointer == -1 or \
@@ -165,6 +163,11 @@ class Demonstrations(object):
         self.act_bias = np.mean(act_full, 0, keepdims=True)
         self.obs_scalar = np.sqrt(np.var(obs_full, 0, keepdims=True)) + 1e-6
         self.act_scalar = np.sqrt(np.var(act_full, 0, keepdims=True)) + 1e-6
+
+        #self.obs_scalar = np.ones_like(self.obs_scalar)
+        #self.act_scalar = np.ones_like(self.act_scalar)
+        #self.obs_bias = np.zeros_like(self.obs_bias)
+        #self.act_bias = np.zeros_like(self.act_bias)
         print(self.obs_scalar)
         print(self.act_scalar)
 
