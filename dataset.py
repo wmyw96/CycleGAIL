@@ -170,6 +170,8 @@ class Demonstrations(object):
         #self.act_bias = np.zeros_like(self.act_bias)
         print(self.obs_scalar)
         print(self.act_scalar)
+        print(self.obs_bias)
+        print(self.act_bias)
 
     def act_r(self, acts):
         return acts * self.act_scalar + self.act_bias

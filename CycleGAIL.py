@@ -139,6 +139,9 @@ class CycleGAIL(object):
             self.lambda_g * (self.cycle_act_a + self.cycle_act_b) + \
             self.lambda_f * (self.cycle_obs_a + self.cycle_obs_b)
 
+        self.loss_ident_f_a = \
+            cycle_loss(self.fake_obs_b, self.real_obs_a, self.metric, w_obs_b)
+
         self.loss_ident_f = \
             cycle_loss(self.fake_obs_a, self.real_obs_b, self.metric, w_obs_a) + \
             cycle_loss(self.fake_obs_b, self.real_obs_a, self.metric, w_obs_b)
@@ -248,6 +251,8 @@ class CycleGAIL(object):
                               name=prefix + '.1', reuse=reuse)
         out = tf.layers.dense(out, hidden, activation=tf.nn.relu,
                               name=prefix + '.2', reuse=reuse)
+        out = tf.layers.dense(out, hidden, activation=tf.nn.relu,
+                              name=prefix + '.3', reuse=reuse)
         out = tf.layers.dense(out, 1, activation=None,
                               name=prefix + '.out', reuse=reuse)
         return out
@@ -379,8 +384,9 @@ class CycleGAIL(object):
 
                 # ideal mapping
                 if (ita2b_act is not None) and (ita2b_obs is not None):
-                    t_obs_b, t_act_b = \
-                        self.sess.run([self.fake_obs_b, self.fake_act_b],
+                    t_obs_b, t_act_b, fa = \
+                        self.sess.run([self.fake_obs_b, self.fake_act_b,
+                                       self.loss_ident_f_a],
                                       feed_dict=demos)
                     obs_a = demos[self.real_obs_a]
                     act_a = demos[self.real_act_a]
@@ -390,8 +396,8 @@ class CycleGAIL(object):
                     g_act_b = expert_b.act_n(g_act_b)
                     error_obs = np.mean(np.square(t_obs_b - g_obs_b))
                     error_act = np.mean(np.square(t_act_b - g_act_b))
-                    print('MSE error = %.6f (obs), %.6f (act)' %
-                          (float(error_obs), float(error_act)))
+                    print('MSE error = %.6f (obs) %.6f, %.6f (act)' %
+                          (float(error_obs), float(fa), float(error_act)))
 
                 start_time = time.time()
 

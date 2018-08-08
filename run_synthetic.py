@@ -99,6 +99,31 @@ if args.mode == 'train':
                  (args.ntraj, args.len), args.ntraj)
     demos_a.set(args.nd1)
     demos_b.set(args.nd2)
+
+    '''import matplotlib.pyplot as plt
+    from scipy.stats import gaussian_kde
+
+    xs = np.linspace(-3, 5, 400)
+
+    
+    density = gaussian_kde(demos_a.next_demo()[1][:, 2])
+    density.covariance_factor = lambda: .25
+    density._compute_covariance()
+    density2 = gaussian_kde(demos_b.next_demo()[1][:, 2])
+    density2.covariance_factor = lambda: .25
+    density2._compute_covariance()
+
+    density3 = gaussian_kde(demos_a.next_demo()[1][:, 2] - demos_b.next_demo()[1][:, 2])
+    density3.covariance_factor = lambda: .25
+    density3._compute_covariance()
+    err = np.mean(np.square(demos_a.next_demo()[1][:, 2] - demos_b.next_demo()[1][:, 2]))
+    print(err)
+
+    plt.plot(xs, density(xs))
+    plt.plot(xs, density2(xs))
+    plt.plot(xs, density3(xs))
+    plt.show()'''
+
     demos_a.set_bz(args.batch_size)
     demos_b.set_bz(args.batch_size)
     print('Load data finished !')

@@ -66,9 +66,9 @@ parser.add_argument('--nd2', dest='nd2', type=int, default=10,
                     help='# of expert 2 trajectoreis for training')
 parser.add_argument('--len', dest='len', type=int, default=300,
                     help='horizon of the trajectory (fixed)')
-parser.add_argument('--obsdim', dest='obsdim', type=int, default=6,
+parser.add_argument('--obsdim', dest='obsdim', type=int, default=17,
                     help='observation space dim (for linear & nonlinear trans)')
-parser.add_argument('--actdim', dest='actdim', type=int, default=17,
+parser.add_argument('--actdim', dest='actdim', type=int, default=6,
                     help='action space dim (for linear & nonlinear trans)')
 """Demo setting"""
 parser.add_argument('--expert_a', dest='expert_a', type=str, default=None,
@@ -84,23 +84,31 @@ args = parser.parse_args()
 
 trans_obs = None
 trans_act = None
+
+expert_dira = 'data/'
+expert_dirb = 'data/'
+
 if args.exp == 'identity':
     trans_act = IdentityTransform()
     trans_obs = IdentityTransform()
+    expert_dirb += '2-'
 if args.exp == 'linear':
     trans_act = LinearTransform(args.actdim)
     trans_obs = LinearTransform(args.obsdim)
 if args.exp == 'nonlinear':
     trans_act = NonLinearTransform(args.actdim, 2)
     trans_obs = NonLinearTransform(args.obsdim, 2)
+if args.exp == 'real':
+    expert_dira += 'T_'
+    expert_dirb += 'T_'
 
 demos_a = Demonstrations(1, 34, 23, 1000000007)
 demos_b = Demonstrations(1, 23, 34, 1000000009, trans_obs, trans_act)
 print('Init')
 print('Load data : Expert #1 Demonstrations')
-demos_a.load('data/' + args.enva, args.ntraj)
+demos_a.load(expert_dira + args.enva, args.ntraj)
 print('Load data : Expert #2 Demonstrations')
-demos_b.load('data/' + args.envb, args.ntraj)
+demos_b.load(expert_dirb + args.envb, args.ntraj)
 demos_a.set(args.nd1)
 demos_b.set(args.nd2)
 demos_a.set_bz(args.batch_size)
