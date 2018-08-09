@@ -190,10 +190,14 @@ class LinearTransform(object):
     def __init__(self, n):
         self.n = n
         self.kernel = ortho_group.rvs(dim=self.n)
-        self.bias = np.random.uniform(-1.0, 1.0, (n,))
+        
+        self.bias = np.random.uniform(-1.0, 1.0, (1, n))
 
     def run(self, inp):
         return np.dot(inp, self.kernel) + self.bias
+
+    def inv_run(self, inp):
+        return np.dot(inp - self.bias, self.kernel)
 
 
 class NonLinearTransform(object):
@@ -204,7 +208,7 @@ class NonLinearTransform(object):
         self.biases = []
         for i in range(nlayers):
             self.kernels.append(ortho_group.rvs(dim=n))
-            self.biases.append(np.random.uniform(-1.0, 1.0, (n,)))
+            self.biases.append(np.random.uniform(-1.0, 1.0, (1, n)))
 
     def run(self, inp):
         out = np.dot(inp, self.kernels[0]) + self.biases[0]
@@ -219,4 +223,7 @@ class IdentityTransform(object):
         pass
 
     def run(self, inp):
+        return inp
+
+    def inv_run(self, inp):
         return inp

@@ -121,6 +121,19 @@ except:
     enva = envb = None
 print('Load data finished !')
 
+init_obs_a = np.concatenate([enva.env.init_qpos[1:], enva.env.init_qvel])
+init_obs_a = init_obs_a.reshape((1, -1))
+
+if args.exp != 'real':
+    init_obs_b = trans_obs.run(init_obs_a)
+else:
+    init_obs_b = np.concatenate([envb.env.init_qpos[1:], envb.env.init_qvel])
+    init_obs_b = init_obs_b.reshape((1, -1))
+
+init_obs_a = demos_a.obs_n(init_obs_a)
+init_obs_b = demos_b.obs_n(init_obs_b)
+align = (init_obs_a, init_obs_b)
+
 model = CycleGAIL(args.name, args, args.clip, enva, envb,
                   demos_a.act_dim, demos_b.act_dim,
                   demos_a.obs_dim, demos_b.obs_dim,
@@ -135,7 +148,8 @@ model = CycleGAIL(args.name, args, args.clip, enva, envb,
                   checkpoint_dir=None,
                   loss=args.loss,
                   vis_mode='mujoco',
-                  concat_steps=args.markov)
+                  concat_steps=args.markov,
+                  align=align)
 print('Training Process:')
 if args.mode == 'train':
     model.train(args, demos_a, demos_b, False, args.ckdir,

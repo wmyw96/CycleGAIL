@@ -15,7 +15,7 @@ class CycleGAIL(object):
                  w_obs_a, w_obs_b, w_act_a, w_act_b,
                  lambda_g, lambda_f, gamma, use_orac_loss, metric='L1',
                  checkpoint_dir=None, spect=True, loss='wgan',
-                 vis_mode='synthetic', concat_steps=0):
+                 vis_mode='synthetic', concat_steps=0, align=None):
         self.graph = tf.Graph()
         self.sess = tf.Session(graph=self.graph)
 
@@ -42,6 +42,7 @@ class CycleGAIL(object):
         self.concat_steps = concat_steps
         self.expert_a = None
         self.expert_b = None
+        self.align = align
         print('FFFFFFFFFFFFFFFFFF')
         print('======= Settings =======')
         print('-------- Models --------')
@@ -59,14 +60,24 @@ class CycleGAIL(object):
         print('CycleGAIL: Start building graph ...')
         with self.graph.as_default():
             tf.set_random_seed(1234)
+            self.real_act_a = tf.placeholder(tf.float32, [None, self.a_act_dim])
+            self.real_act_b = tf.placeholder(tf.float32, [None, self.b_act_dim])
+            self.real_obs_a = tf.placeholder(tf.float32, [None, self.a_obs_dim])
+            self.real_obs_b = tf.placeholder(tf.float32, [None, self.b_obs_dim])
+            self.orac_obs_a = tf.placeholder(tf.float32, [None, self.a_obs_dim])
+            self.orac_obs_b = tf.placeholder(tf.float32, [None, self.b_obs_dim])
+            self.real_a = tf.concat([self.real_obs_a, self.real_act_a], 1)
+            self.real_b = tf.concat([self.real_obs_b, self.real_act_b], 1)
             self.build_model(w_obs_a, w_obs_b, w_act_a, w_act_b, args)
         print('CycleGAIL: Build graph finished !')
 
-    def markov(self, current):
+    def markov(self, current, steps=None):
         stacks = []
-        for i in range(self.concat_steps):
-            stacks.append(current[i: -self.concat_steps + i, :])
-        stacks.append(current[self.concat_steps:, :])
+        if steps is None:
+            steps = self.concat_steps
+        for i in range(steps):
+            stacks.append(current[i: -steps + i, :])
+        stacks.append(current[steps:, :])
         return tf.concat(stacks, axis=1)
 
     def graident_penalty(self, name, real, fake):
@@ -79,12 +90,6 @@ class CycleGAIL(object):
         return tf.reduce_mean((slopes - 1) ** 2)
 
     def build_model(self, w_obs_a, w_obs_b, w_act_a, w_act_b, args):
-        self.real_act_a = tf.placeholder(tf.float32, [None, self.a_act_dim])
-        self.real_act_b = tf.placeholder(tf.float32, [None, self.b_act_dim])
-        self.real_obs_a = tf.placeholder(tf.float32, [None, self.a_obs_dim])
-        self.real_obs_b = tf.placeholder(tf.float32, [None, self.b_obs_dim])
-        self.orac_obs_a = tf.placeholder(tf.float32, [None, self.a_obs_dim])
-        self.orac_obs_b = tf.placeholder(tf.float32, [None, self.b_obs_dim])
         self.ts = tf.placeholder(tf.float32, [None, 1])
 
         self.fake_act_a = \
@@ -110,10 +115,8 @@ class CycleGAIL(object):
         self.cycle_obs_b = \
             cycle_loss(self.real_obs_b, self.inv_obs_b, self.metric)
 
-        self.real_a = tf.concat([self.ts, self.real_obs_a, self.real_act_a], 1)
-        self.fake_a = tf.concat([self.ts, self.fake_obs_a, self.fake_act_a], 1)
-        self.real_b = tf.concat([self.ts, self.real_obs_b, self.real_act_b], 1)
-        self.fake_b = tf.concat([self.ts, self.fake_obs_b, self.fake_act_b], 1)
+        self.fake_a = tf.concat([self.fake_obs_a, self.fake_act_a], 1)
+        self.fake_b = tf.concat([self.fake_obs_b, self.fake_act_b], 1)
         self.d_real_a = self.dis_net('d_a', self.markov(self.real_a), False)
         self.d_real_b = self.dis_net('d_b', self.markov(self.real_b), False)
         self.d_fake_a = self.dis_net('d_a', self.markov(self.fake_a))
@@ -153,6 +156,16 @@ class CycleGAIL(object):
         self.loss_best_f = \
             cycle_loss(self.real_obs_a, self.real_obs_b, self.metric, w_obs_a)
 
+        self.loss_align = None
+        if self.align is not None:
+            obs_a, obs_b = self.align
+            self.trans_b = self.gen_net('f_b', obs_a, self.b_obs_dim)
+            self.trans_a = self.gen_net('f_a', obs_b, self.a_obs_dim)
+            self.loss_align = \
+                cycle_loss(self.trans_b, obs_b, self.metric) + \
+                cycle_loss(self.trans_a, obs_a, self.metric)
+            #self.loss_gf += self.loss_align
+            #self.loss_f += self.loss_align
         t_vars = tf.trainable_variables()
         self.params_g_a = [var for var in t_vars if 'g_a' in var.name]
         self.params_g_b = [var for var in t_vars if 'g_b' in var.name]
@@ -221,14 +234,42 @@ class CycleGAIL(object):
         self.writer = tf.summary.FileWriter('./logs/' + self.dir_name,
                                             self.sess.graph)
 
+    def build_dynamic_envs(self):
+        self.next_a = self.env_net('e_a', self.real_a, self.a_obs_dim, False)
+        self.next_b = self.env_net('e_b', self.real_b, self.b_obs_dim, False)
+        self.true_next_a = tf.placeholder(tf.float32, [None, self.a_obs_dim])
+        self.true_next_b = tf.placeholder(tf.float32, [None, self.b_obs_dim])
+        self.oracle_loss = \
+            tf.reduce_mean(tf.square(self.next_a - self.true_next_a)) + \
+            tf.reduce_mean(tf.square(self.next_b - self.true_next_b))
+
+        self.next_fa = self.env_net('e_a', self.fake_a, self.a_obs_dim)
+        self.next_fb = self.env_net('e_b', self.fake_b, self.a_obs_dim)
+        self.loss_gf_o = \
+            tf.reduce_mean(tf.square(self.next_fa[:-1, :] -
+                                     self.fake_obs_a[1:, :])) + \
+            tf.reduce_mean(tf.square(self.next_fb[:-1, :] -
+                                     self.fake_obs_b[1:, :]))
+
+    def env_net(self, prefix, inp, out_dim, reuse=True):
+        hidden = self.hidden_d
+
+        out = tf.layers.dense(inp, hidden, activation=tf.nn.relu,
+                              name=prefix + '.1', reuse=reuse)
+        out = tf.layers.dense(out, hidden, activation=tf.nn.relu,
+                              name=prefix + '.2', reuse=reuse)
+        out = tf.layers.dense(out, out_dim, activation=None,
+                              name=prefix + '.out', reuse=reuse)
+        return out
+
     def gen_net(self, prefix, inp, out_dim, reuse=True):
-        pre_dim = int(inp.get_shape()[-1])
         # if prefix[0] == 'f':
         #     return inp
         # if prefix == 'f_a':
         #     return inp * np.array([[1, 1, 0.5]])
         # if prefix == 'f_b':
         #     return inp * np.array([[1, 1, 2.0]])
+        inp = tf.convert_to_tensor(inp, dtype=tf.float32)
         if prefix[0] == 'f':
             hidden = self.hidden_f
         else:
@@ -251,8 +292,6 @@ class CycleGAIL(object):
                               name=prefix + '.1', reuse=reuse)
         out = tf.layers.dense(out, hidden, activation=tf.nn.relu,
                               name=prefix + '.2', reuse=reuse)
-        out = tf.layers.dense(out, hidden, activation=tf.nn.relu,
-                              name=prefix + '.3', reuse=reuse)
         out = tf.layers.dense(out, 1, activation=None,
                               name=prefix + '.out', reuse=reuse)
         return out
@@ -398,6 +437,9 @@ class CycleGAIL(object):
                     error_act = np.mean(np.square(t_act_b - g_act_b))
                     print('MSE error = %.6f (obs) %.6f, %.6f (act)' %
                           (float(error_obs), float(fa), float(error_act)))
+                    if self.loss_align is not None:
+                        print('AlignError = %.6f' %
+                              float(self.sess.run(self.loss_align)))
 
                 start_time = time.time()
 
