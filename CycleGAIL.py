@@ -69,6 +69,9 @@ class CycleGAIL(object):
             self.real_a = tf.concat([self.real_obs_a, self.real_act_a], 1)
             self.real_b = tf.concat([self.real_obs_b, self.real_act_b], 1)
             self.build_model(w_obs_a, w_obs_b, w_act_a, w_act_b, args)
+            self.build_dynamic_envs(args)
+            self.build_train_settings(args)
+            self.init = tf.global_variables_initializer()
         print('CycleGAIL: Build graph finished !')
 
     def markov(self, current, steps=None):
@@ -166,6 +169,8 @@ class CycleGAIL(object):
                 cycle_loss(self.trans_a, obs_a, self.metric)
             #self.loss_gf += self.loss_align
             #self.loss_f += self.loss_align
+
+    def build_train_settings(self, args):
         t_vars = tf.trainable_variables()
         self.params_g_a = [var for var in t_vars if 'g_a' in var.name]
         self.params_g_b = [var for var in t_vars if 'g_b' in var.name]
@@ -224,7 +229,6 @@ class CycleGAIL(object):
         self.show_params('discriminator d', self.params_d)
 
         # clip=0.01
-        self.init = tf.global_variables_initializer()
 
         tf.summary.scalar('d loss', self.loss_d)
         tf.summary.scalar('g loss', self.loss_g)
@@ -234,12 +238,12 @@ class CycleGAIL(object):
         self.writer = tf.summary.FileWriter('./logs/' + self.dir_name,
                                             self.sess.graph)
 
-    def build_dynamic_envs(self):
+    def build_dynamic_envs(self, args):
         self.next_a = self.env_net('e_a', self.real_a, self.a_obs_dim, False)
         self.next_b = self.env_net('e_b', self.real_b, self.b_obs_dim, False)
         self.true_next_a = tf.placeholder(tf.float32, [None, self.a_obs_dim])
         self.true_next_b = tf.placeholder(tf.float32, [None, self.b_obs_dim])
-        self.oracle_loss = \
+        self.loss_e = \
             tf.reduce_mean(tf.square(self.next_a - self.true_next_a)) + \
             tf.reduce_mean(tf.square(self.next_b - self.true_next_b))
 
@@ -250,14 +254,27 @@ class CycleGAIL(object):
                                      self.fake_obs_a[1:, :])) + \
             tf.reduce_mean(tf.square(self.next_fb[:-1, :] -
                                      self.fake_obs_b[1:, :]))
+        t_vars = tf.trainable_variables()
+        self.params_e_a = [var for var in t_vars if 'e_a' in var.name]
+        self.params_e_b = [var for var in t_vars if 'e_b' in var.name]
+        self.params_e = self.params_e_a + self.params_e_b
+        self.e_opt = \
+            tf.train.AdamOptimizer(args.lr). \
+                minimize(self.loss_e, var_list=self.params_e)
+        self.loss_f += self.loss_gf_o
+        self.loss_g += self.loss_gf_o
 
     def env_net(self, prefix, inp, out_dim, reuse=True):
-        hidden = self.hidden_d
+        hidden = 512
 
         out = tf.layers.dense(inp, hidden, activation=tf.nn.relu,
                               name=prefix + '.1', reuse=reuse)
         out = tf.layers.dense(out, hidden, activation=tf.nn.relu,
                               name=prefix + '.2', reuse=reuse)
+        out = tf.layers.dense(out, hidden, activation=tf.nn.relu,
+                              name=prefix + '.3', reuse=reuse)
+        out = tf.layers.dense(out, hidden, activation=tf.nn.relu,
+                              name=prefix + '.4', reuse=reuse)
         out = tf.layers.dense(out, out_dim, activation=None,
                               name=prefix + '.out', reuse=reuse)
         return out
@@ -321,16 +338,96 @@ class CycleGAIL(object):
                  self.ts: _}
         return demos
 
+    def train_e_net(self, nepoches, expert_a, expert_b, during_train=False):
+        les = []
+        if during_train:
+            mod_number = 2
+        else:
+            mod_number = 10
+        npass = 0
+        cur_time = -time.time()
+        for epoch_idx in range(nepoches):
+            demos = self.get_demo(expert_a, expert_b)
+            if epoch_idx % mod_number:
+                feed_d = {self.real_act_a: demos[self.real_act_a][:-1, :],
+                          self.real_obs_a: demos[self.real_obs_a][:-1, :],
+                          self.real_act_b: demos[self.real_act_b][:-1, :],
+                          self.real_obs_b: demos[self.real_obs_b][:-1, :],
+                          self.true_next_a: demos[self.real_obs_a][1:, :],
+                          self.true_next_b: demos[self.real_obs_b][1:, :]}
+            else:
+                next_obs_a = \
+                    self.env_a.predict(expert_a.obs_r(demos[self.real_obs_a][:-1, :]),
+                                       expert_a.act_r(demos[self.real_act_a][:-1, :]))
+                next_obs_b = \
+                    self.env_b.predict(expert_b.obs_r(demos[self.real_obs_b][:-1, :]),
+                                       expert_b.act_r(demos[self.real_act_b][:-1, :]))
+                if next_obs_a is None or next_obs_b is None:
+                    npass += 1
+                    continue
+                feed_d = {
+                    self.real_act_a: demos[self.real_act_a][:-1, :],
+                    self.real_obs_a: demos[self.real_obs_a][:-1, :],
+                    self.real_act_b: demos[self.real_act_b][:-1, :],
+                    self.real_obs_b: demos[self.real_obs_b][:-1, :],
+                    self.true_next_a: expert_a.obs_n(next_obs_a),
+                    self.true_next_b: expert_b.obs_n(next_obs_b)
+                }
+            le, _ = \
+                self.sess.run([self.loss_e, self.e_opt], feed_dict=feed_d)
+            les.append(le)
+            if (epoch_idx + 1) % 100 == 0:
+                demos = self.get_demo(expert_a, expert_b, is_train=False)
+                feed_d = {
+                    self.real_act_a: demos[self.real_act_a][:-1, :],
+                    self.real_obs_a: demos[self.real_obs_a][:-1, :],
+                    self.real_act_b: demos[self.real_act_b][:-1, :],
+                    self.real_obs_b: demos[self.real_obs_b][:-1, :],
+                    self.true_next_a: demos[self.real_obs_a][1:, :],
+                    self.true_next_b: demos[self.real_obs_b][1:, :]
+                }
+                ls_test = self.sess.run(self.loss_e, feed_dict=feed_d)
+
+                next_obs_a = \
+                    self.env_a.predict(
+                        expert_a.obs_r(demos[self.real_obs_a][:-1, :]),
+                        expert_a.act_r(demos[self.real_act_a][:-1, :]))
+                next_obs_b = \
+                    self.env_b.predict(
+                        expert_b.obs_r(demos[self.real_obs_b][:-1, :]),
+                        expert_b.act_r(demos[self.real_act_b][:-1, :]))
+                if next_obs_a is None or next_obs_b is None:
+                    print('error!')
+                    continue
+                feed_d2 = {
+                    self.real_act_a: demos[self.real_act_a][:-1, :],
+                    self.real_obs_a: demos[self.real_obs_a][:-1, :],
+                    self.real_act_b: demos[self.real_act_b][:-1, :],
+                    self.real_obs_b: demos[self.real_obs_b][:-1, :],
+                    self.true_next_a: expert_a.obs_n(next_obs_a),
+                    self.true_next_b: expert_b.obs_n(next_obs_b)
+                }
+                ls_test2 = self.sess.run(self.loss_e, feed_dict=feed_d2)
+                cur_time += time.time()
+                print('[E net] Epoch %d (%.2f s), Passes = %d, '
+                      'Train Loss E = %.6f, Test Loss E = %.6f, %.6f' %
+                      (epoch_idx, cur_time, npass, float(np.mean(les)),
+                       float(ls_test), float(ls_test2)))
+                les = []
+                cur_time = -time.time()
+                npass = 0
+
     # suppose have same horizon H
     def train(self, args, expert_a, expert_b, eval_on=True,
               ck_dir=None, ita2b_obs=None, ita2b_act=None):
         # data: numpy, [N x n_x]
-
         print(self.loss)
         self.sess.run(self.init)
 
-        ls_ds, ls_gs, ls_fs, wds, ls_ifs, ls_igs, ls_bfs, ls_bgs = \
-            [], [], [], [], [], [], [], []
+        self.train_e_net(10000, expert_a, expert_b)
+
+        ls_ds, ls_gs, ls_fs, wds, ls_ifs, ls_igs, ls_bfs, ls_bgs, ls_gfos = \
+            [], [], [], [], [], [], [], [], []
 
         t_obs_b_p, t_act_b_p, t_obs_a_p, t_act_a_p = None, None, None, None
         start_time = time.time()
@@ -345,6 +442,8 @@ class CycleGAIL(object):
             summary = self.sess.run(self.merged, demos)
             self.writer.add_summary(summary, epoch_idx)
 
+            if epoch_idx % 100 == 0:
+                self.train_e_net(100, expert_a, expert_b, during_train=True)
             for i in range(n_c):
                 demos = self.get_demo(expert_a, expert_b)
                 ls_d, _ = self.sess.run([self.loss_d, self.d_opt],
@@ -377,10 +476,10 @@ class CycleGAIL(object):
                                     feed_dict=demos)
             ls_fs.append(ls_f)
 
-            ls_if, ls_ig, ls_bf, ls_bg = \
+            ls_if, ls_ig, ls_bf, ls_bg, ls_gfo = \
                 self.sess.run([self.loss_ident_f,
                                self.loss_ident_g, self.loss_best_f,
-                               self.loss_best_g],
+                               self.loss_best_g, self.loss_gf_0],
                               feed_dict=demos)
             ls_ifs.append(ls_if)
             ls_igs.append(ls_ig)
@@ -397,14 +496,14 @@ class CycleGAIL(object):
                 print('Epoch %d (%.3f s), loss D = %.6f, loss G = %.6f,'
                       'loss F = %6f, w_dist = %.9f, loss ident G = %.6f, '
                       'loss ident F = %.6f, loss best G = %.6f, '
-                      'loss best F = %.6f' %
+                      'loss best F = %.6f, loss GF oracle = %.6f' %
                       (epoch_idx, end_time - start_time, float(np.mean(ls_ds)),
                        float(np.mean(ls_gs)), float(np.mean(ls_fs)),
                        float(np.mean(wds)), float(np.mean(ls_igs)),
                        float(np.mean(ls_ifs)), float(np.mean(ls_bgs)),
-                       float(np.mean(ls_bfs))))
-                ls_ds, ls_gs, ls_fs, wds, ls_ifs, ls_igs, ls_bfs, ls_bgs = \
-                    [], [], [], [], [], [], [], []
+                       float(np.mean(ls_bfs)), float(np.mean(ls_gfo))))
+                ls_ds, ls_gs, ls_fs, wds, ls_ifs, ls_igs, ls_bfs, \
+                    ls_bgs, ls_gfo = [], [], [], [], [], [], [], [], []
 
                 # comparation
                 demos = self.get_demo(expert_a, expert_b, is_train=False)

@@ -4,6 +4,7 @@ import numpy as np
 import tensorflow as tf
 import gym
 
+from myenvs import EnvWrapper
 from dataset import Demonstrations
 from dataset import IdentityTransform, LinearTransform, NonLinearTransform
 from CycleGAIL import CycleGAIL
@@ -116,12 +117,23 @@ demos_b.set_bz(args.batch_size)
 try:
     enva = gym.make(args.enva)
     envb = gym.make(args.envb)
+    print('Load the environment')
+    identity = IdentityTransform()
+    enva = EnvWrapper(args.enva, enva, identity, identity)
+    envb = EnvWrapper(args.envb, envb, trans_obs, trans_act)
 except:
     print('Unable to load environment!')
     enva = envb = None
 print('Load data finished !')
 
-init_obs_a = np.concatenate([enva.env.init_qpos[1:], enva.env.init_qvel])
+batch_obs, batch_act, ___ = demos_a.next_batch()
+batch_obs_t, batch_act_t = trans_obs.run(batch_obs), trans_act.run(batch_act)
+batch_obs_r, batch_act_r = trans_obs.inv_run(batch_obs_t), \
+                           trans_act.inv_run(batch_act_t)
+print(np.mean(np.square(batch_obs - batch_obs_r)))
+print(np.mean(np.square(batch_act - batch_act_r)))
+
+init_obs_a = np.concatenate([enva.init_qpos[1:], enva.init_qvel])
 init_obs_a = init_obs_a.reshape((1, -1))
 
 if args.exp != 'real':

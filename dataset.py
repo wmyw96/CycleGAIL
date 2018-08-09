@@ -190,14 +190,14 @@ class LinearTransform(object):
     def __init__(self, n):
         self.n = n
         self.kernel = ortho_group.rvs(dim=self.n)
-        
+        self.kernel_inv = np.matrix(self.kernel).I
         self.bias = np.random.uniform(-1.0, 1.0, (1, n))
 
     def run(self, inp):
         return np.dot(inp, self.kernel) + self.bias
 
     def inv_run(self, inp):
-        return np.dot(inp - self.bias, self.kernel)
+        return np.array(np.dot(inp - self.bias, self.kernel_inv))
 
 
 class NonLinearTransform(object):
@@ -206,16 +206,29 @@ class NonLinearTransform(object):
         self.nlayers = nlayers
         self.kernels = []
         self.biases = []
+        self.kernels_inv = []
         for i in range(nlayers):
             self.kernels.append(ortho_group.rvs(dim=n))
+            self.kernels_inv.append(np.matrix(self.kernels[i]).I)
             self.biases.append(np.random.uniform(-1.0, 1.0, (1, n)))
 
     def run(self, inp):
         out = np.dot(inp, self.kernels[0]) + self.biases[0]
         for i in range(self.nlayers - 1):
-            out = np.tanh(out)
+            out = np.tanh(out / 10) * 10
             out = np.dot(out, self.kernels[i + 1]) + self.biases[i + 1]
         return out
+
+    def inv_run(self, inp):
+        out = np.dot(inp - self.biases[self.nlayers - 1],
+                     self.kernels_inv[self.nlayers - 1])
+        for i in range(self.nlayers - 1):
+            if np.sum(out >= 9.5) > 0:
+                return None
+            out = np.arctanh(out / 10) * 10
+            out = np.dot(out - self.biases[self.nlayers - i - 2],
+                         self.kernels_inv[self.nlayers - i - 2])
+        return np.array(out)
 
 
 class IdentityTransform(object):
