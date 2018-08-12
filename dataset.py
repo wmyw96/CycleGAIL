@@ -132,23 +132,22 @@ class Demonstrations(object):
     def next_batch(self):
         if self.batch_pointer == -1 or \
            self.batch_pointer >= self.cur_obs.shape[0]:
-            self.cur_obs, self.cur_act, _ = self.next_demo(train=True)
+            self.cur_obs, self.cur_act, self.cur_ts = \
+                self.next_demo(train=True)
             # arr = np.arange(self.cur_obs.shape[0])
             # np.random.shuffle(arr)
             # indexs = [int(i) for i in arr]
             # self.cur_obs = self.cur_obs[indexs, :]
             # self.cur_act = self.cur_act[indexs, :]
             self.batch_pointer = 0
+        #print(self.cur_obs.shape)
         ed = min(self.batch_pointer + self.batch_size,
                  self.cur_obs.shape[0])
         rt_obs = self.cur_obs[self.batch_pointer:ed, :]
         rt_act = self.cur_act[self.batch_pointer:ed, :]
-        horizon = self.cur_obs.shape[0]
-        ts = np.zeros((rt_obs.shape[0], 1))
-        for i in range(ed - self.batch_pointer):
-            ts[i, 0] = (i + self.batch_pointer + 0.0) / horizon
+        rt_ts = self.cur_ts[self.batch_pointer:ed, :]
         self.batch_pointer = ed
-        return rt_obs, rt_act, ts
+        return rt_obs, rt_act, rt_ts
 
     def normalize(self):
         obs_full = []

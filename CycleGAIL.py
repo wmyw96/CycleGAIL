@@ -63,6 +63,8 @@ class CycleGAIL(object):
         print('CycleGAIL: Build graph finished !')
 
     def markov(self, current):
+        return tf.reshape(current, (-1,
+                                    self.concat_steps * current.get_shape()[1]))
         stacks = []
         for i in range(self.concat_steps):
             stacks.append(current[i: -self.concat_steps + i, :])
@@ -94,6 +96,9 @@ class CycleGAIL(object):
         self.inv_act_a = self.gen_net('g_a', self.fake_act_b, self.a_act_dim)
         self.inv_act_b = self.gen_net('g_b', self.fake_act_a, self.b_act_dim)
 
+        print(self.fake_act_a.get_shape())
+        print(self.inv_act_a.get_shape())
+
         self.fake_obs_a = \
             self.gen_net('f_a', self.real_obs_b, self.a_obs_dim, False)
         self.fake_obs_b = \
@@ -110,17 +115,19 @@ class CycleGAIL(object):
         self.cycle_obs_b = \
             cycle_loss(self.real_obs_b, self.inv_obs_b, self.metric)
 
-        self.real_a = tf.concat([self.ts, self.real_obs_a, self.real_act_a], 1)
-        self.fake_a = tf.concat([self.ts, self.fake_obs_a, self.fake_act_a], 1)
-        self.real_b = tf.concat([self.ts, self.real_obs_b, self.real_act_b], 1)
-        self.fake_b = tf.concat([self.ts, self.fake_obs_b, self.fake_act_b], 1)
+        self.real_a = tf.concat([self.real_obs_a, self.real_act_a], 1)
+        self.fake_a = tf.concat([self.fake_obs_a, self.fake_act_a], 1)
+        self.real_b = tf.concat([self.real_obs_b, self.real_act_b], 1)
+        self.fake_b = tf.concat([self.fake_obs_b, self.fake_act_b], 1)
         self.d_real_a = self.dis_net('d_a', self.markov(self.real_a), False)
         self.d_real_b = self.dis_net('d_b', self.markov(self.real_b), False)
         self.d_fake_a = self.dis_net('d_a', self.markov(self.fake_a))
         self.d_fake_b = self.dis_net('d_b', self.markov(self.fake_b))
 
-        self.wdist_a = tf.reduce_mean(self.d_real_a - self.d_fake_a)
-        self.wdist_b = tf.reduce_mean(self.d_real_b - self.d_fake_b)
+        self.wdist_a = \
+            tf.reduce_mean(self.d_real_a) - tf.reduce_mean(self.d_fake_a)
+        self.wdist_b = \
+            tf.reduce_mean(self.d_real_b) - tf.reduce_mean(self.d_fake_b)
         self.wdist = self.wdist_a + self.wdist_b
         self.loss_d = - self.wdist_a - self.wdist_b
         if self.loss == 'wgan-gp':
@@ -238,8 +245,8 @@ class CycleGAIL(object):
                               name=prefix + '.1', reuse=reuse)
         out = tf.layers.dense(out, hidden, activation=tf.nn.tanh,
                               name=prefix + '.2', reuse=reuse)
-        #out = tf.layers.dense(out, hidden, activation=tf.nn.relu,
-        #                      name=prefix + '.3', reuse=reuse)
+        out = tf.layers.dense(out, hidden, activation=tf.nn.tanh,
+                              name=prefix + '.3', reuse=reuse)
         out = tf.layers.dense(out, out_dim, activation=None,
                               name=prefix + '.out', reuse=reuse)
         return out
