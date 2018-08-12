@@ -64,7 +64,7 @@ class CycleGAIL(object):
         print('CycleGAIL: Build graph finished !')
 
     def markov(self, current):
-        return tf.expand_dims(current, 1)
+        return tf.expand_dims(current, 0)
 
     def graident_penalty(self, name, real, fake):
         alpha = tf.random_uniform([tf.shape(real)[0], 1], 0., 1.)
