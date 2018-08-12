@@ -64,10 +64,11 @@ class CycleGAIL(object):
         print('CycleGAIL: Build graph finished !')
 
     def markov(self, current):
-        return tf.expand_dims(current, 0)
+        return current
 
     def graident_penalty(self, name, real, fake):
-        alpha = tf.random_uniform([tf.shape(real)[0], 1], 0., 1.)
+        alpha = tf.random_uniform([tf.shape(real)[0],
+                                   tf.shape(real)[1], 1], 0., 1.)
         hat = self.markov(alpha * real + ((1 - alpha) * fake))
         critic_hat_a = self.dis_net(name, hat)
         gradients = tf.gradients(critic_hat_a, [hat])[0]
@@ -76,13 +77,19 @@ class CycleGAIL(object):
         return tf.reduce_mean((slopes - 1) ** 2)
 
     def build_model(self, w_obs_a, w_obs_b, w_act_a, w_act_b, args):
-        self.real_act_a = tf.placeholder(tf.float32, [None, self.a_act_dim])
-        self.real_act_b = tf.placeholder(tf.float32, [None, self.b_act_dim])
-        self.real_obs_a = tf.placeholder(tf.float32, [None, self.a_obs_dim])
-        self.real_obs_b = tf.placeholder(tf.float32, [None, self.b_obs_dim])
-        self.orac_obs_a = tf.placeholder(tf.float32, [None, self.a_obs_dim])
-        self.orac_obs_b = tf.placeholder(tf.float32, [None, self.b_obs_dim])
-        self.ts = tf.placeholder(tf.float32, [None, 1])
+        self.real_act_a = tf.placeholder(tf.float32,
+                                         [None, None, self.a_act_dim])
+        self.real_act_b = tf.placeholder(tf.float32,
+                                         [None, None, self.b_act_dim])
+        self.real_obs_a = tf.placeholder(tf.float32,
+                                         [None, None, self.a_obs_dim])
+        self.real_obs_b = tf.placeholder(tf.float32,
+                                         [None, None, self.b_obs_dim])
+        self.orac_obs_a = tf.placeholder(tf.float32,
+                                         [None, None, self.a_obs_dim])
+        self.orac_obs_b = tf.placeholder(tf.float32,
+                                         [None, None, self.b_obs_dim])
+        self.ts = tf.placeholder(tf.float32, [None, None, 1])
 
         self.fake_act_a = \
             self.gen_net('g_a', self.real_act_b, self.a_act_dim, False)
@@ -110,10 +117,10 @@ class CycleGAIL(object):
         self.cycle_obs_b = \
             cycle_loss(self.real_obs_b, self.inv_obs_b, self.metric)
 
-        self.real_a = tf.concat([self.real_obs_a, self.real_act_a], 1)
-        self.fake_a = tf.concat([self.fake_obs_a, self.fake_act_a], 1)
-        self.real_b = tf.concat([self.real_obs_b, self.real_act_b], 1)
-        self.fake_b = tf.concat([self.fake_obs_b, self.fake_act_b], 1)
+        self.real_a = tf.concat([self.ts, self.real_obs_a, self.real_act_a], 2)
+        self.fake_a = tf.concat([self.ts, self.fake_obs_a, self.fake_act_a], 2)
+        self.real_b = tf.concat([self.ts, self.real_obs_b, self.real_act_b], 2)
+        self.fake_b = tf.concat([self.ts, self.fake_obs_b, self.fake_act_b], 2)
         self.d_real_a = self.dis_net('d_a', self.markov(self.real_a), False)
         self.d_real_b = self.dis_net('d_b', self.markov(self.real_b), False)
         self.d_fake_a = self.dis_net('d_a', self.markov(self.fake_a))
@@ -249,7 +256,7 @@ class CycleGAIL(object):
     def dis_net(self, prefix, inp, reuse=True):
         with tf.variable_scope(prefix, reuse=reuse):
             # whether to use dropout ?
-            x = build_n_layer_conv_stack(general_conv1d, inp, 15, 32, n=5,
+            x = build_n_layer_conv_stack(general_conv1d, inp, 15, 32, n=3,
                                          do_norm="layer")
             return x
 
@@ -271,6 +278,11 @@ class CycleGAIL(object):
         else:
             obs_a, act_a, _ = expert_a.next_demo(False)
             obs_b, act_b, _ = expert_b.next_demo(False)
+            obs_a = np.expand_dims(obs_a, 0)
+            obs_b = np.expand_dims(obs_b, 0)
+            act_a = np.expand_dims(act_a, 0)
+            act_b = np.expand_dims(act_b, 0)
+            _ = np.expand_dims(_, 0)
         demos = {self.real_obs_a: obs_a,
                  self.real_act_a: act_a,
                  self.real_obs_b: obs_b,

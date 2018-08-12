@@ -27,6 +27,7 @@ class Demonstrations(object):
         self.obs_bias = None
         self.act_dim = 0
         self.obs_dim = 0
+        self.seq_len = 0
         if trans_obs is None:
             self.trans_obs = IdentityTransform()
         else:
@@ -82,9 +83,10 @@ class Demonstrations(object):
             self.test_demos.append(self.demos[i + num_trains])
         self.test_pointer = self.pointer - num_trains
 
-    def set_bz(self, batch_size):
+    def set_bz(self, batch_size, seq_len):
         self.batch_size = batch_size
         self.batch_pointer = -1
+        self.seq_len = seq_len
 
     def load(self, file_name, nitems):
         if os.path.isdir(file_name):
@@ -130,24 +132,18 @@ class Demonstrations(object):
             return obs, act, np.array(range(obs.shape[0]))
 
     def next_batch(self):
-        if self.batch_pointer == -1 or \
-           self.batch_pointer >= self.cur_obs.shape[0]:
-            self.cur_obs, self.cur_act, self.cur_ts = \
-                self.next_demo(train=True)
-            # arr = np.arange(self.cur_obs.shape[0])
-            # np.random.shuffle(arr)
-            # indexs = [int(i) for i in arr]
-            # self.cur_obs = self.cur_obs[indexs, :]
-            # self.cur_act = self.cur_act[indexs, :]
-            self.batch_pointer = 0
-        #print(self.cur_obs.shape)
-        ed = min(self.batch_pointer + self.batch_size,
-                 self.cur_obs.shape[0])
-        rt_obs = self.cur_obs[self.batch_pointer:ed, :]
-        rt_act = self.cur_act[self.batch_pointer:ed, :]
-        rt_ts = self.cur_ts[self.batch_pointer:ed, :]
-        self.batch_pointer = ed
-        return rt_obs, rt_act, rt_ts
+        obss, acts, tss = [], [], []
+        for i in range(self.batch_size):
+            obs, act, ts = self.next_demo()
+            horizon = min(obs.shape[0], self.seq_len)
+            obs = np.expand_dims(obs, 0)
+            act = np.expand_dims(act, 0)
+            ts = np.expand_dims(ts, 0)
+            obss.append(obs)
+            acts.append(act)
+            tss.append(ts)
+        return np.concatenate(obss, 0), np.concatenate(acts, 0), \
+            np.concatenate(tss, 0)
 
     def normalize(self):
         obs_full = []

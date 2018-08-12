@@ -54,8 +54,10 @@ parser.add_argument('--n_c', dest='n_c', type=int, default=5,
                     help='n_critic')
 parser.add_argument('--log_interval', dest='log_interval', type=int, default=1,
                     help='length of log interval')
-parser.add_argument('--batch_size', dest='batch_size', type=int, default=100,
+parser.add_argument('--batch_size', dest='batch_size', type=int, default=5,
                     help='batch size')
+parser.add_argument('--seq_len', dest='seq_len', type=int, default=300,
+                    help='seq len')
 
 """Dataset setting"""
 parser.add_argument('--ntraj', dest='ntraj', type=int, default=20,
@@ -111,8 +113,8 @@ print('Load data : Expert #2 Demonstrations')
 demos_b.load(expert_dirb + args.envb, args.ntraj)
 demos_a.set(args.nd1)
 demos_b.set(args.nd2)
-demos_a.set_bz(args.batch_size)
-demos_b.set_bz(args.batch_size)
+demos_a.set_bz(args.batch_size, args.seq_len)
+demos_b.set_bz(args.batch_size, args.seq_len)
 try:
     enva = gym.make(args.enva)
     envb = gym.make(args.envb)

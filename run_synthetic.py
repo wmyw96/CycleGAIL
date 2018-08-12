@@ -62,8 +62,10 @@ parser.add_argument('--n_c', dest='n_c', type=int, default=5,
                     help='n_critic')
 parser.add_argument('--markov', dest='markov', type=int, default=0,
                     help='markov concat steps')
-parser.add_argument('--batch_size', dest='batch_size', type=int, default=300,
+parser.add_argument('--batch_size', dest='batch_size', type=int, default=5,
                     help='batch size')
+parser.add_argument('--seq_len', dest='seq_len', type=int, default=300,
+                    help='seq len')
 parser.add_argument('--log_interval', dest='log_interval', type=int, default=100,
                     help='length of log interval')
 
@@ -124,8 +126,8 @@ if args.mode == 'train':
     plt.plot(xs, density3(xs))
     plt.show()'''
 
-    demos_a.set_bz(args.batch_size)
-    demos_b.set_bz(args.batch_size)
+    demos_a.set_bz(args.batch_size, args.seq_len)
+    demos_b.set_bz(args.batch_size, args.seq_len)
     print('Load data finished !')
     enva = SpinDrive3D(5, 1, 0.2)
     envb = SpinDrive3D(5, 2, 0.2)
