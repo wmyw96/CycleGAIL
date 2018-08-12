@@ -6,6 +6,7 @@ from utils import *
 from sn import spectral_normed_weight
 import warnings
 from mujoco_utils import *
+from layers import *
 
 
 class CycleGAIL(object):
@@ -63,13 +64,7 @@ class CycleGAIL(object):
         print('CycleGAIL: Build graph finished !')
 
     def markov(self, current):
-        return tf.reshape(current, (-1,
-                                    self.concat_steps * current.get_shape()[1]))
-        stacks = []
-        for i in range(self.concat_steps):
-            stacks.append(current[i: -self.concat_steps + i, :])
-        stacks.append(current[self.concat_steps:, :])
-        return tf.concat(stacks, axis=1)
+        return tf.expand_dims(current, 1)
 
     def graident_penalty(self, name, real, fake):
         alpha = tf.random_uniform([tf.shape(real)[0], 1], 0., 1.)
@@ -252,17 +247,11 @@ class CycleGAIL(object):
         return out
 
     def dis_net(self, prefix, inp, reuse=True):
-        hidden = self.hidden_d
-
-        out = tf.layers.dense(inp, hidden, activation=tf.nn.relu,
-                              name=prefix + '.1', reuse=reuse)
-        out = tf.layers.dense(out, hidden, activation=tf.nn.relu,
-                              name=prefix + '.2', reuse=reuse)
-        out = tf.layers.dense(out, hidden, activation=tf.nn.relu,
-                              name=prefix + '.3', reuse=reuse)
-        out = tf.layers.dense(out, 1, activation=None,
-                              name=prefix + '.out', reuse=reuse)
-        return out
+        with tf.variable_scope(prefix, reuse=reuse):
+            # whether to use dropout ?
+            x = build_n_layer_conv_stack(general_conv1d, inp, 15, 32, n=5,
+                                         do_norm="layer")
+            return x
 
     def clip_trainable_params(self, params):
         ops = []
