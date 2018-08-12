@@ -238,20 +238,55 @@ class CycleGAIL(object):
         #     return inp * np.array([[1, 1, 0.5]])
         # if prefix == 'f_b':
         #     return inp * np.array([[1, 1, 2.0]])
-        if prefix[0] == 'f':
-            hidden = self.hidden_f
-        else:
-            hidden = self.hidden_g
+        # if prefix[0] == 'f':
+        #     hidden = self.hidden_f
+        # else:
+        #     hidden = self.hidden_g
 
-        out = tf.layers.dense(inp, hidden, activation=tf.nn.tanh,
-                              name=prefix + '.1', reuse=reuse)
-        out = tf.layers.dense(out, hidden, activation=tf.nn.tanh,
-                              name=prefix + '.2', reuse=reuse)
-        out = tf.layers.dense(out, hidden, activation=tf.nn.tanh,
-                              name=prefix + '.3', reuse=reuse)
-        out = tf.layers.dense(out, out_dim, activation=None,
-                              name=prefix + '.out', reuse=reuse)
-        return out
+        # out = tf.layers.dense(inp, hidden, activation=tf.nn.tanh,
+        #                       name=prefix + '.1', reuse=reuse)
+        # out = tf.layers.dense(out, hidden, activation=tf.nn.tanh,
+        #                       name=prefix + '.2', reuse=reuse)
+        # out = tf.layers.dense(out, hidden, activation=tf.nn.tanh,
+        #                       name=prefix + '.3', reuse=reuse)
+        # out = tf.layers.dense(out, out_dim, activation=None,
+        #                      name=prefix + '.out', reuse=reuse)
+        # return out
+        return self.simple_seq2seq(prefix, inp, out_dim, reuse)
+
+    def simple_seq2seq(self, prefix, inp, out_dim, reuse=True):
+        with tf.variable_scope(prefix):
+            x = general_conv1d(inp,
+                num_filters=32,
+                filter_size=1,
+                stride=1,
+                stddev=0.02,
+                do_norm='layer',
+                do_relu=True,
+                relufactor=0,
+                name="c1")
+            x = tf.nn.relu(x + general_conv1d(
+                x,
+                num_filters=32,
+                filter_size=1,
+                stride=1,
+                stddev=0.02,
+                do_norm='layer',
+                do_relu=False,
+                relufactor=0,
+                name="c2"))
+            x = general_conv1d(
+                x,
+                num_filters=out_dim,
+                filter_size=1,
+                stride=1,
+                stddev=0.02,
+                do_norm=None,
+                do_relu=False,
+                relufactor=0,
+                name="c3")
+            out = x
+            return out
 
     def dis_net(self, prefix, inp, reuse=True):
         with tf.variable_scope(prefix, reuse=reuse):
