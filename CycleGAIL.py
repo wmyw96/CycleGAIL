@@ -255,7 +255,7 @@ class CycleGAIL(object):
         return self.simple_seq2seq(prefix, inp, out_dim, reuse)
 
     def simple_seq2seq(self, prefix, inp, out_dim, reuse=True):
-        with tf.variable_scope(prefix):
+        with tf.variable_scope(prefix, reuse=reuse):
             x = general_conv1d(inp,
                 num_filters=32,
                 filter_size=1,
