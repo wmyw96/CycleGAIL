@@ -8,6 +8,23 @@ import warnings
 from mujoco_utils import *
 
 
+def dense(inp, out_dim, activation, name, std, reuse):
+    with tf.variable_scope(name, reuse=reuse):
+        weight_shape = [int(inp.get_shape()[1]), out_dim]
+        w = tf.get_variable('w', weight_shape)
+        w_t = w + tf.random_normal(shape=weight_shape,
+                                   mean=0.0, stddev=std, dtype=tf.float32)
+        b = tf.get_variable('b', [out_dim],
+                            initializer=tf.constant_initializer(0))
+        b_t = b + tf.random_normal(shape=[out_dim],
+                                   mean=0.0, stddev=std, dtype=tf.float32)
+        if activation is None:
+            return tf.nn.bias_add(tf.matmul(inp, w_t), b_t)
+        else:
+            return activation(tf.nn.bias_add(tf.matmul(inp, w_t), b_t))
+
+
+
 class CycleGAIL(object):
     def __init__(self, name, args, clip, env_a, env_b,
                  a_act_dim, b_act_dim, a_obs_dim, b_obs_dim,
@@ -85,21 +102,26 @@ class CycleGAIL(object):
         self.real_obs_b = tf.placeholder(tf.float32, [None, self.b_obs_dim])
         self.orac_obs_a = tf.placeholder(tf.float32, [None, self.a_obs_dim])
         self.orac_obs_b = tf.placeholder(tf.float32, [None, self.b_obs_dim])
+        self.std = tf.placeholder(tf.float32, shape=())
         self.ts = tf.placeholder(tf.float32, [None, 1])
 
         self.fake_act_a = \
-            self.gen_net('g_a', self.real_act_b, self.a_act_dim, False)
+            self.gen_net('g_a', self.real_act_b, self.a_act_dim, self.std, False)
         self.fake_act_b = \
-            self.gen_net('g_b', self.real_act_a, self.b_act_dim, False)
-        self.inv_act_a = self.gen_net('g_a', self.fake_act_b, self.a_act_dim)
-        self.inv_act_b = self.gen_net('g_b', self.fake_act_a, self.b_act_dim)
+            self.gen_net('g_b', self.real_act_a, self.b_act_dim, self.std, False)
+        self.inv_act_a = \
+            self.gen_net('g_a', self.fake_act_b, self.a_act_dim, self.std)
+        self.inv_act_b = \
+            self.gen_net('g_b', self.fake_act_a, self.b_act_dim, self.std)
 
         self.fake_obs_a = \
-            self.gen_net('f_a', self.real_obs_b, self.a_obs_dim, False)
+            self.gen_net('f_a', self.real_obs_b, self.a_obs_dim, self.std, False)
         self.fake_obs_b = \
-            self.gen_net('f_b', self.real_obs_a, self.b_obs_dim, False)
-        self.inv_obs_a = self.gen_net('f_a', self.fake_obs_b, self.a_obs_dim)
-        self.inv_obs_b = self.gen_net('f_b', self.fake_obs_a, self.b_obs_dim)
+            self.gen_net('f_b', self.real_obs_a, self.b_obs_dim, self.std, False)
+        self.inv_obs_a = \
+            self.gen_net('f_a', self.fake_obs_b, self.a_obs_dim, self.std)
+        self.inv_obs_b = \
+            self.gen_net('f_b', self.fake_obs_a, self.b_obs_dim, self.std)
 
         self.cycle_act_a = \
             cycle_loss(self.real_act_a, self.inv_act_a, self.metric)
@@ -221,7 +243,7 @@ class CycleGAIL(object):
         self.writer = tf.summary.FileWriter('./logs/' + self.dir_name,
                                             self.sess.graph)
 
-    def gen_net(self, prefix, inp, out_dim, reuse=True):
+    def gen_net(self, prefix, inp, out_dim, std, reuse=True):
         pre_dim = int(inp.get_shape()[-1])
         # if prefix[0] == 'f':
         #     return inp
@@ -234,14 +256,14 @@ class CycleGAIL(object):
         else:
             hidden = self.hidden_g
 
-        out = tf.layers.dense(inp, hidden, activation=tf.nn.tanh,
-                              name=prefix + '.1', reuse=reuse)
-        out = tf.layers.dense(out, hidden, activation=tf.nn.tanh,
-                              name=prefix + '.2', reuse=reuse)
+        out = dense(inp, hidden, activation=tf.nn.tanh,
+                    name=prefix + '.1', std=std, reuse=reuse)
+        out = dense(out, hidden, activation=tf.nn.tanh,
+                    name=prefix + '.2', std=std, reuse=reuse)
         #out = tf.layers.dense(out, hidden, activation=tf.nn.relu,
         #                      name=prefix + '.3', reuse=reuse)
-        out = tf.layers.dense(out, out_dim, activation=None,
-                              name=prefix + '.out', reuse=reuse)
+        out = dense(out, out_dim, activation=None,
+                    name=prefix + '.out', std=std, reuse=reuse)
         return out
 
     def dis_net(self, prefix, inp, reuse=True):
@@ -268,18 +290,23 @@ class CycleGAIL(object):
         for param in params:
             print(param.name, ': ', param.get_shape())
 
-    def get_demo(self, expert_a, expert_b, is_train=True):
+    def get_demo(self, expert_a, expert_b, epoch_idx=None, is_train=True):
         if is_train:
             obs_a, act_a, _ = expert_a.next_batch()
             obs_b, act_b, _ = expert_b.next_batch()
         else:
             obs_a, act_a, _ = expert_a.next_demo(False)
             obs_b, act_b, _ = expert_b.next_demo(False)
+        if epoch_idx is None:
+            ts = 0.0
+        else:
+            ts = (100000 - epoch_idx) / 100000
         demos = {self.real_obs_a: obs_a,
                  self.real_act_a: act_a,
                  self.real_obs_b: obs_b,
                  self.real_act_b: act_b,
-                 self.ts: _}
+                 self.ts: _,
+                 self.std: ts}
         return demos
 
     # suppose have same horizon H
@@ -307,7 +334,7 @@ class CycleGAIL(object):
             self.writer.add_summary(summary, epoch_idx)
 
             for i in range(n_c):
-                demos = self.get_demo(expert_a, expert_b)
+                demos = self.get_demo(expert_a, expert_b, epoch_idx)
                 ls_d, _ = self.sess.run([self.loss_d, self.d_opt],
                                         feed_dict=demos)
                 if self.loss == 'wgan':
@@ -328,12 +355,12 @@ class CycleGAIL(object):
             ls_igs.append(ls_ig)
             ls_bfs.append(ls_bf)
             ls_bgs.append(ls_bg)'''
-            demos = self.get_demo(expert_a, expert_b)
+            demos = self.get_demo(expert_a, expert_b, epoch_idx)
             ls_g, _, wd = self.sess.run([self.loss_g, self.g_opt, self.wdist],
                                         feed_dict=demos)
             ls_gs.append(ls_g)
             wds.append(wd)
-            demos = self.get_demo(expert_a, expert_b)
+            demos = self.get_demo(expert_a, expert_b, epoch_idx)
             ls_f, _ = self.sess.run([self.loss_f, self.f_opt],
                                     feed_dict=demos)
             ls_fs.append(ls_f)
