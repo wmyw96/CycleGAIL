@@ -119,8 +119,8 @@ class Demonstrations(object):
     def next_demo(self, train=True, normalize=True):
         obs, act = self._next_demo(train)
         #return obs, act
-        #obs = obs[:100, :]
-        #act = act[:100, :]
+        obs = obs[:100, :]
+        act = act[:100, :]
         if normalize:
             return (obs - self.obs_bias) / self.obs_scalar, \
                    (act - self.act_bias) / self.act_scalar, \
@@ -223,3 +223,17 @@ class IdentityTransform(object):
 
     def run(self, inp):
         return inp
+
+
+class ConcatTransform(object):
+    def __init__(self, trans_obs, trans_act, obs_dim):
+        self.trans_obs = trans_obs
+        self.trans_act = trans_act
+        self.obs_dim = obs_dim
+
+    def run(self, inp):
+        obs = inp[:, :self.obs_dim]
+        act = inp[:, self.obs_dim:]
+        res = np.concatenate([self.trans_obs.run(obs),
+                              self.trans_act.run(act)], 1)
+        return res

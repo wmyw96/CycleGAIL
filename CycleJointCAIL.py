@@ -12,12 +12,12 @@ def dense(inp, out_dim, activation, name, std, reuse):
     with tf.variable_scope(name, reuse=reuse):
         weight_shape = [int(inp.get_shape()[1]), out_dim]
         w = tf.get_variable('w', weight_shape)
-        w_t = w + tf.random_normal(shape=weight_shape,
-                                   mean=0.0, stddev=std, dtype=tf.float32)
+        w_t = w #+ tf.random_normal(shape=weight_shape,
+                #                   mean=0.0, stddev=std, dtype=tf.float32)
         b = tf.get_variable('b', [out_dim],
                             initializer=tf.constant_initializer(0))
-        b_t = b + tf.random_normal(shape=[out_dim],
-                                   mean=0.0, stddev=std, dtype=tf.float32)
+        b_t = b #+ tf.random_normal(shape=[out_dim],
+                #                   mean=0.0, stddev=std, dtype=tf.float32)
         if activation is None:
             return tf.nn.bias_add(tf.matmul(inp, w_t), b_t)
         else:
@@ -183,11 +183,11 @@ class CycleGAIL(object):
     def gen_net(self, prefix, inp, out_dim, std, reuse=True):
         hidden = self.hidden_g
 
-        out = dense(inp, hidden, activation=tf.nn.relu,
+        out = dense(inp, hidden, activation=tf.nn.tanh,
                     name=prefix + '.1', std=std, reuse=reuse)
-        out = dense(out, hidden, activation=tf.nn.relu,
+        out = dense(out, hidden, activation=tf.nn.tanh,
                     name=prefix + '.2', std=std, reuse=reuse)
-        out = dense(out, hidden, activation=tf.nn.relu,
+        out = dense(out, hidden, activation=tf.nn.tanh,
                     name=prefix + '.3', std=std, reuse=reuse)
         out = dense(out, out_dim, activation=None,
                     name=prefix + '.out', std=std, reuse=reuse)
@@ -267,18 +267,36 @@ class CycleGAIL(object):
             wds.append(wd)
 
             if (epoch_idx + 1) % args.log_interval == 0:
-                end_time = time.time()
-                print('Epoch %d (%.3f s), loss D = %.6f, loss G = %.6f,'
-                      'w_dist = %.9f, loss ident G = %.6f, '
-                      'loss best G = %.6f' %
-                      (epoch_idx, end_time - start_time, float(np.mean(ls_ds)),
-                       float(np.mean(ls_gs)), float(np.mean(wds)),
-                       float(np.mean(ls_is)), float(np.mean(ls_bgs))))
-                ls_ds, ls_gs, wds, ls_is, ls_bgs = [], [], [], [], []
-                start_time = time.time()
                 self.visual_eval(expert_a, expert_b,
                                  (epoch_idx + 1) // args.log_interval)
                 # calculate ideal mapping loss
+                tj_a, tj_b, _ = \
+                    self.get_demo(expert_a, expert_b, istrain=False)
+                transed_b = self.sess.run(self.fake_b,
+                                          feed_dict={self.real_a: tj_a,
+                                                     self.std: 0.0})
+                ideal_b = self.calc_ideal_b(tj_a, ita2b, expert_a, expert_b)
+
+                end_time = time.time()
+                print('Epoch %d (%.3f s), loss D = %.6f, loss G = %.6f,'
+                      'w_dist = %.9f, loss ident G = %.6f, '
+                      'loss best G = %.6f, EM = %.6f' %
+                      (epoch_idx, end_time - start_time, float(np.mean(ls_ds)),
+                       float(np.mean(ls_gs)), float(np.mean(wds)),
+                       float(np.mean(ls_is)), float(np.mean(ls_bgs)),
+                       float(np.mean(np.square(transed_b - ideal_b)))))
+                ls_ds, ls_gs, wds, ls_is, ls_bgs = [], [], [], [], []
+                start_time = time.time()
+
+    def calc_ideal_b(self, traj, trans, domaina, domainb):
+        obs_a, act_a = self.unzip(traj, domaina.obs_dim)
+        obs_a = domaina.obs_r(obs_a)
+        act_a = domaina.act_r(act_a)
+        obs_b, act_b = self.unzip(trans.run(np.concatenate([obs_a, act_a], 1)),
+                                  domainb.obs_dim)
+        obs_b = domainb.obs_n(obs_b)
+        act_b = domainb.act_n(act_b)
+        return np.concatenate([obs_b, act_b], 1)
 
     def unzip(self, obs_act_pair, obs_dim):
         return obs_act_pair[:, :obs_dim], obs_act_pair[:, obs_dim:]

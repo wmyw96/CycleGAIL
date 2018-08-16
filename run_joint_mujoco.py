@@ -5,7 +5,8 @@ import tensorflow as tf
 import gym
 
 from dataset import Demonstrations
-from dataset import IdentityTransform, LinearTransform, NonLinearTransform
+from dataset import IdentityTransform, LinearTransform, \
+    NonLinearTransform, ConcatTransform
 from CycleJointCAIL import CycleGAIL
 
 parser = argparse.ArgumentParser(description='Argument parser')
@@ -102,6 +103,8 @@ if args.exp == 'real':
     expert_dira += 'T_'
     expert_dirb += 'T_'
 
+ideal_trans = ConcatTransform(trans_obs, trans_act, args.obsdim)
+
 demos_a = Demonstrations(1, 34, 23, 1000000007)
 demos_b = Demonstrations(1, 23, 34, 1000000009, trans_obs, trans_act)
 print('Init')
@@ -134,36 +137,9 @@ model = CycleGAIL(args.name, args, args.clip, enva, envb,
                   concat_steps=args.markov)
 print('Training Process:')
 if args.mode == 'train':
-    model.train(args, demos_a, demos_b, False, args.ckdir)
+    model.train(args, demos_a, demos_b, args.ckdir, ideal_trans)
 else:
-    model.link_demo(demos_a, demos_b)
-    model.load(args.ckdir)
-    #model.evaluation(demos_a, demos_b, args.ckdir)
-
-    # test a->b trans
-
-    from policy_net import MlpPolicy
-    obs_b = envb.reset()
-    done = False
-    total_rd = 0.0
-    while not done:
-        obs_a, _ = model.run_trans('b2a', obs=obs_b)
-        policy_obs_a = obs_a.reshape(-1)
-
-        policy = MlpPolicy(args.expert_a)
-        act_a = policy.run(policy_obs_a)
-
-        _, act_b = model.run_trans('a2b', act=act_a)
-        obs_b, rd, done, _ = envb.step(act_b)
-        envb.render()
-        total_rd += rd
-    print('Total reward = %d\n' % total_rd)
-
-    from evaluation import run_policy_evaluation
-
-    #print('Evaluation a->b')
-    run_policy_evaluation(100, envb, model, args.expert_a)
-    run_policy_evaluation(100, enva, model, args.expert_b)
+    raise NotImplementedError
 
 '''
 '''
