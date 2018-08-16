@@ -203,13 +203,16 @@ class NonLinearTransform(object):
         self.kernels = []
         self.biases = []
         for i in range(nlayers):
-            self.kernels.append(ortho_group.rvs(dim=n))
+            if n > 1:
+                self.kernels.append(ortho_group.rvs(dim=n))
+            else:
+                self.kernels.append(np.random.uniform(-1.0, 1.0, (1, 1)))
             self.biases.append(np.random.uniform(-1.0, 1.0, (n,)))
 
     def run(self, inp):
         out = np.dot(inp, self.kernels[0]) + self.biases[0]
         for i in range(self.nlayers - 1):
-            out = np.tanh(out)
+            out = np.tanh(out / 10) * 10
             out = np.dot(out, self.kernels[i + 1]) + self.biases[i + 1]
         return out
 

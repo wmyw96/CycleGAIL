@@ -24,7 +24,6 @@ def dense(inp, out_dim, activation, name, std, reuse):
             return activation(tf.nn.bias_add(tf.matmul(inp, w_t), b_t))
 
 
-
 class CycleGAIL(object):
     def __init__(self, name, args, clip, env_a, env_b,
                  a_act_dim, b_act_dim, a_obs_dim, b_obs_dim,
@@ -105,6 +104,8 @@ class CycleGAIL(object):
         self.std = tf.placeholder(tf.float32, shape=())
         self.ts = tf.placeholder(tf.float32, [None, 1])
 
+        self.real_a = tf.concat([self.real_obs_a, self.real_act_a], 1)
+
         self.fake_act_a = \
             self.gen_net('g_a', self.real_act_b, self.a_act_dim, self.std, False)
         self.fake_act_b = \
@@ -132,10 +133,10 @@ class CycleGAIL(object):
         self.cycle_obs_b = \
             cycle_loss(self.real_obs_b, self.inv_obs_b, self.metric)
 
-        self.real_a = tf.concat([self.ts, self.real_obs_a, self.real_act_a], 1)
-        self.fake_a = tf.concat([self.ts, self.fake_obs_a, self.fake_act_a], 1)
-        self.real_b = tf.concat([self.ts, self.real_obs_b, self.real_act_b], 1)
-        self.fake_b = tf.concat([self.ts, self.fake_obs_b, self.fake_act_b], 1)
+        self.real_a = tf.concat([self.real_obs_a, self.real_act_a], 1)
+        self.fake_a = tf.concat([self.fake_obs_a, self.fake_act_a], 1)
+        self.real_b = tf.concat([self.real_obs_b, self.real_act_b], 1)
+        self.fake_b = tf.concat([self.fake_obs_b, self.fake_act_b], 1)
         self.d_real_a = self.dis_net('d_a', self.markov(self.real_a), False)
         self.d_real_b = self.dis_net('d_b', self.markov(self.real_b), False)
         self.d_fake_a = self.dis_net('d_a', self.markov(self.fake_a))
@@ -256,13 +257,13 @@ class CycleGAIL(object):
         else:
             hidden = self.hidden_g
 
-        out = dense(inp, hidden, activation=tf.nn.tanh,
-                    name=prefix + '.1', std=std, reuse=reuse)
-        out = dense(out, hidden, activation=tf.nn.tanh,
-                    name=prefix + '.2', std=std, reuse=reuse)
+        #out = dense(inp, hidden, activation=tf.nn.relu,
+        #            name=prefix + '.1', std=std, reuse=reuse)
+        #out = dense(out, hidden, activation=tf.nn.relu,
+        #            name=prefix + '.2', std=std, reuse=reuse)
         #out = tf.layers.dense(out, hidden, activation=tf.nn.relu,
         #                      name=prefix + '.3', reuse=reuse)
-        out = dense(out, out_dim, activation=None,
+        out = dense(inp, out_dim, activation=None,
                     name=prefix + '.out', std=std, reuse=reuse)
         return out
 
@@ -341,7 +342,7 @@ class CycleGAIL(object):
                     self.sess.run(self.clip_d)
                 ls_ds.append(ls_d)
 
-            '''demos = self.get_demo(expert_a, expert_b)
+            demos = self.get_demo(expert_a, expert_b)
             ls_g, ls_f, ls_if, ls_ig, ls_bf, ls_bg, _, wd = \
                 self.sess.run([self.loss_g, self.loss_f, self.loss_ident_f,
                                self.loss_ident_g, self.loss_best_f,
@@ -354,7 +355,8 @@ class CycleGAIL(object):
             ls_ifs.append(ls_if)
             ls_igs.append(ls_ig)
             ls_bfs.append(ls_bf)
-            ls_bgs.append(ls_bg)'''
+            ls_bgs.append(ls_bg)
+            '''
             demos = self.get_demo(expert_a, expert_b, epoch_idx)
             ls_g, _, wd = self.sess.run([self.loss_g, self.g_opt, self.wdist],
                                         feed_dict=demos)
@@ -373,13 +375,17 @@ class CycleGAIL(object):
             ls_ifs.append(ls_if)
             ls_igs.append(ls_ig)
             ls_bfs.append(ls_bf)
-            ls_bgs.append(ls_bg)
+            ls_bgs.append(ls_bg)'''
 
             if (epoch_idx + 1) % args.log_interval == 0:
                 end_time = time.time()
-                if eval_on:
+                if eval_on and self.vis_mode != '1d':
                     self.visual_evaluation(expert_a, expert_b,
                                            (epoch_idx + 1)//args.log_interval)
+                if eval_on and self.vis_mode == '1d':
+                    self.visual_evaluation(expert_a, expert_b,
+                                           (epoch_idx + 1) // args.log_interval,
+                                           ita2b_obs, ita2b_act)
                 if ck_dir is not None:
                     self.store(ck_dir, epoch_idx + 1)
                 print('Epoch %d (%.3f s), loss D = %.6f, loss G = %.6f,'
@@ -428,13 +434,42 @@ class CycleGAIL(object):
 
                 start_time = time.time()
 
-    def visual_evaluation(self, expert_a, expert_b, id):
+    def synthetic_transform_a2b(self, obs, act, expert_a, expert_b,
+                                obs_trans, act_trans):
+        obs_b = expert_b.obs_n(obs_trans.run(expert_a.obs_r(obs)))
+        act_b = expert_b.act_n(act_trans.run(expert_a.act_r(act)))
+        return obs_b, act_b
+
+    def visual_evaluation(self, expert_a, expert_b, id,
+                          obs_trans=None, act_trans=None):
         # a2b
         demos = self.get_demo(expert_a, expert_b, is_train=False)
         obs_b, act_b = self.sess.run([self.fake_obs_b, self.fake_act_b],
                                      feed_dict=demos)
-        if self.vis_mode == 'synthetic':
-            distribution_diff(demos[self.real_obs_a], demos[self.real_act_b],
+        if self.vis_mode == '1d':
+            data = util_grid(-2.0, 2.0, 200, -2.0, 2.0, 200)
+            x = np.ogrid[-2.0:2.0:200j]
+            y = np.ogrid[-2.0:2.0:200j]
+            v = self.sess.run(self.d_real_b,
+                              feed_dict={self.real_obs_b: data[:, 0].reshape(-1, 1),
+                                         self.real_act_b: data[:, 1].reshape(-1, 1)})
+            v = util_togrid(v, 200, 200)
+            plt.figure(figsize=(8, 8))
+            plt.contourf(x.reshape(-1), y.reshape(-1), v, 20)
+
+            obs_a, act_a = demos[self.real_obs_a], demos[self.real_act_a]
+            obs_tb, act_tb = \
+                self.synthetic_transform_a2b(demos[self.real_obs_a],
+                                             demos[self.real_act_a],
+                                             expert_a, expert_b,
+                                             obs_trans, act_trans)
+            plt.scatter(obs_a, act_a, color='b', s=0.5)
+            plt.scatter(obs_b, act_b, color='y', s=0.5)
+            plt.scatter(obs_tb, act_tb, color='r', s=0.5)
+            plt.savefig(self.dir_name + '/a2b%d.jpg' % id)
+            plt.close()
+        elif self.vis_mode == 'synthetic':
+            distribution_diff(demos[self.real_obs_a], demos[self.real_act_a],
                               demos[self.real_obs_b], demos[self.real_act_b],
                               obs_b, act_b,
                               self.dir_name + '/img/' + str(id) + 'a2b_D.jpg')
@@ -574,7 +609,7 @@ class CycleGAIL(object):
                 if need_normalize:
                     obs = self.expert_a.obs_n(obs)
                 obs_t = self.sess.run(self.fake_obs_b,
-                                      feed_dict={self.real_obs_a: obs})
+                                      feed_dict={self.real_obs_a: obs, self.std: 0.0})
                 if need_normalize:
                     obs_t = self.expert_b.obs_r(obs_t)
             if act is not None:
@@ -582,7 +617,7 @@ class CycleGAIL(object):
                 if need_normalize:
                     act = self.expert_a.act_n(act)
                 act_t = self.sess.run(self.fake_act_b,
-                                      feed_dict={self.real_act_a: act})
+                                      feed_dict={self.real_act_a: act, self.std: 0.0})
                 if need_normalize:
                     act_t = self.expert_b.act_r(act_t)
         else:
@@ -591,7 +626,7 @@ class CycleGAIL(object):
                 if need_normalize:
                     obs = self.expert_b.obs_n(obs)
                 obs_t = self.sess.run(self.fake_obs_a,
-                                      feed_dict={self.real_obs_b: obs})
+                                      feed_dict={self.real_obs_b: obs, self.std: 0.0})
                 if need_normalize:
                     obs_t = self.expert_a.obs_r(obs_t)
             if act is not None:
@@ -599,7 +634,7 @@ class CycleGAIL(object):
                 if need_normalize:
                     act = self.expert_b.act_n(act)
                 act_t = self.sess.run(self.fake_act_a,
-                                      feed_dict={self.real_act_b: act})
+                                      feed_dict={self.real_act_b: act, self.std: 0.0})
                 if need_normalize:
                     act_t = self.expert_a.act_r(act_t)
         return obs_t, act_t

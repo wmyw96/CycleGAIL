@@ -192,6 +192,42 @@ def distribution_diff(state0, action0, state1, action1, state2, action2,
         plt.show()
 
 
+def util_grid(x_l, x_r, x_steps, y_l, y_r, y_steps):
+    delta_x = (x_r - x_l) / (x_steps - 1)
+    delta_y = (y_r - y_l) / (y_steps - 1)
+    data = np.zeros((x_steps * y_steps, 2))
+    n = 0
+    for i in range(x_steps):
+        for j in range(y_steps):
+            data[n, :] = np.array([delta_x * i + x_l, delta_y * j + y_l])
+            n += 1
+    return data
+
+
+def util_togrid(x, nx, ny):
+    data = np.zeros((nx, ny))
+    n = 0
+    for i in range(nx):
+        for j in range(ny):
+            data[j, i] = x[n]
+            n += 1
+    return data
+
+
+def onedim_full_diff(obs_a, act_a, obs_b, act_b, obs_ib, act_ib,
+                     filename):
+    figure = plt.figure(figsize=(8, 8))
+    ax1 = figure.add_subplot(111)
+    ax1.scatter(obs_a, act_a, color='b', s=0.5)
+    ax1.scatter(obs_b, act_b, color='y', s=0.5)
+    ax1.scatter(obs_ib, act_ib, color='r', s=0.5)
+    if filename is not None:
+        plt.savefig(filename)
+        plt.close()
+    else:
+        plt.show()
+
+
 def generate_dir(prefix):
     if os.path.isdir(prefix):
         pass
