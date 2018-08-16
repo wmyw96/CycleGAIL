@@ -17,10 +17,8 @@ def lrelu(x, alpha=0.2):
 
 
 def cycle_loss(origin, reconstructed, metric, weight=None):
-    if weight is None:
-        weight = np.ones((1, origin.get_shape()[1]))
     if metric == 'L1':
-        return tf.reduce_mean(tf.abs(origin - reconstructed) * weight)
+        return tf.reduce_mean(tf.abs(origin - reconstructed))
     if metric == 'L2':
         return tf.reduce_mean(tf.square(origin - reconstructed))
     raise NotImplementedError

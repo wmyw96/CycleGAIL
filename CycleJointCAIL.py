@@ -6,6 +6,7 @@ from utils import *
 from sn import spectral_normed_weight
 import warnings
 from mujoco_utils import *
+from layers import *
 
 
 def dense(inp, out_dim, activation, name, std, reuse):
@@ -73,26 +74,22 @@ class CycleGAIL(object):
         print('CycleGAIL: Build graph finished !')
 
     def markov(self, current):
-        stacks = []
-        for i in range(self.concat_steps):
-            stacks.append(current[i: -self.concat_steps + i, :])
-        stacks.append(current[self.concat_steps:, :])
-        return tf.concat(stacks, axis=1)
+        return current
 
     def graident_penalty(self, name, real, fake):
-        alpha = tf.random_uniform([tf.shape(real)[0], 1], 0., 1.)
+        alpha = tf.random_uniform([tf.shape(real)[0], 1, 1], 0., 1.)
         hat = self.markov(alpha * real + ((1 - alpha) * fake))
         critic_hat_a = self.dis_net(name, hat)
         gradients = tf.gradients(critic_hat_a, [hat])[0]
         slopes = tf.sqrt(tf.reduce_sum(tf.square(gradients),
-                                       reduction_indices=[1]))
+                                       reduction_indices=[1, 2]))
         return tf.reduce_mean((slopes - 1) ** 2)
 
     def build_model(self, args):
-        self.real_a = tf.placeholder(tf.float32, [None, self.a_dim])
-        self.real_b = tf.placeholder(tf.float32, [None, self.b_dim])
+        self.real_a = tf.placeholder(tf.float32, [None, None, self.a_dim])
+        self.real_b = tf.placeholder(tf.float32, [None, None, self.b_dim])
         self.std = tf.placeholder(tf.float32, shape=())
-        self.ts = tf.placeholder(tf.float32, [None, 1])
+        self.ts = tf.placeholder(tf.float32, [None, None, 1])
 
         self.fake_a = \
             self.gen_net('g_a', self.real_b, self.a_dim, self.std, False)
@@ -106,10 +103,10 @@ class CycleGAIL(object):
         self.cycle_b = \
             cycle_loss(self.real_b, self.inv_b, self.metric)
 
-        self.real_at = tf.concat([self.ts, self.real_a], 1)
-        self.real_bt = tf.concat([self.ts, self.real_b], 1)
-        self.fake_at = tf.concat([self.ts, self.fake_a], 1)
-        self.fake_bt = tf.concat([self.ts, self.fake_b], 1)
+        self.real_at = tf.concat([self.ts, self.real_a], 2)
+        self.real_bt = tf.concat([self.ts, self.real_b], 2)
+        self.fake_at = tf.concat([self.ts, self.fake_a], 2)
+        self.fake_bt = tf.concat([self.ts, self.fake_b], 2)
         self.d_real_a = self.dis_net('d_a', self.markov(self.real_at), False)
         self.d_real_b = self.dis_net('d_b', self.markov(self.real_bt), False)
         self.d_fake_a = self.dis_net('d_a', self.markov(self.fake_at))
@@ -183,28 +180,22 @@ class CycleGAIL(object):
     def gen_net(self, prefix, inp, out_dim, std, reuse=True):
         hidden = self.hidden_g
 
-        out = dense(inp, hidden, activation=tf.nn.tanh,
-                    name=prefix + '.1', std=std, reuse=reuse)
-        out = dense(out, hidden, activation=tf.nn.tanh,
-                    name=prefix + '.2', std=std, reuse=reuse)
-        out = dense(out, hidden, activation=tf.nn.tanh,
-                    name=prefix + '.3', std=std, reuse=reuse)
-        out = dense(out, out_dim, activation=None,
-                    name=prefix + '.out', std=std, reuse=reuse)
+        out = tf.layers.dense(inp, hidden, activation=tf.nn.tanh,
+                              name=prefix + '.1', reuse=reuse)
+        out = tf.layers.dense(out, hidden, activation=tf.nn.tanh,
+                              name=prefix + '.2', reuse=reuse)
+        out = tf.layers.dense(out, hidden, activation=tf.nn.tanh,
+                              name=prefix + '.3', reuse=reuse)
+        out = tf.layers.dense(out, out_dim, activation=None,
+                              name=prefix + '.out', reuse=reuse)
         return out
 
     def dis_net(self, prefix, inp, reuse=True):
-        hidden = self.hidden_d
-
-        out = tf.layers.dense(inp, hidden, activation=tf.nn.relu,
-                              name=prefix + '.1', reuse=reuse)
-        out = tf.layers.dense(out, hidden, activation=tf.nn.relu,
-                              name=prefix + '.2', reuse=reuse)
-        out = tf.layers.dense(out, hidden, activation=tf.nn.relu,
-                              name=prefix + '.3', reuse=reuse)
-        out = tf.layers.dense(out, 1, activation=None,
-                              name=prefix + '.out', reuse=reuse)
-        return out
+        with tf.variable_scope(prefix, reuse=reuse):
+            # whether to use dropout ?
+            x = build_n_layer_conv_stack(general_conv1d, inp, 15, 32, n=5,
+                                         do_norm="layer")
+            return x
 
     def clip_trainable_params(self, params):
         ops = []
@@ -221,11 +212,13 @@ class CycleGAIL(object):
         if istrain:
             obs_a, act_a, ts_a = expert_a.next_batch()
             obs_b, act_b, ts_b = expert_b.next_batch()
+            a_concat = np.concatenate([obs_a, act_a], 2)
+            b_concat = np.concatenate([obs_b, act_b], 2)
         else:
             obs_a, act_a, ts_a = expert_a.next_demo(train=False)
             obs_b, act_b, ts_b = expert_b.next_demo(train=False)
-        a_concat = np.concatenate([obs_a, act_a], 1)
-        b_concat = np.concatenate([obs_b, act_b], 1)
+            a_concat = np.concatenate([obs_a, act_a], 1)
+            b_concat = np.concatenate([obs_b, act_b], 1)
         return a_concat, b_concat, ts_a
 
     # suppose have same horizon H
@@ -272,9 +265,10 @@ class CycleGAIL(object):
                 # calculate ideal mapping loss
                 tj_a, tj_b, _ = \
                     self.get_demo(expert_a, expert_b, istrain=False)
-                transed_b = self.sess.run(self.fake_b,
-                                          feed_dict={self.real_a: tj_a,
-                                                     self.std: 0.0})
+                transed_b = \
+                    self.sess.run(self.fake_b,
+                                  feed_dict={self.real_a: np.expand_dims(tj_a, 0),
+                                             self.std: 0.0})
                 ideal_b = self.calc_ideal_b(tj_a, ita2b, expert_a, expert_b)
 
                 end_time = time.time()

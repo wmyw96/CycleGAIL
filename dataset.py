@@ -82,9 +82,10 @@ class Demonstrations(object):
             self.test_demos.append(self.demos[i + num_trains])
         self.test_pointer = self.pointer - num_trains
 
-    def set_bz(self, batch_size):
+    def set_bz(self, batch_size, seq_len):
         self.batch_size = batch_size
         self.batch_pointer = -1
+        self.seq_len = seq_len
 
     def load(self, file_name, nitems):
         if os.path.isdir(file_name):
@@ -118,9 +119,8 @@ class Demonstrations(object):
 
     def next_demo(self, train=True, normalize=True):
         obs, act = self._next_demo(train)
-        #return obs, act
-        obs = obs[:100, :]
-        act = act[:100, :]
+        obs = obs[:self.seq_len, :]
+        act = act[:self.seq_len, :]
         if normalize:
             return (obs - self.obs_bias) / self.obs_scalar, \
                    (act - self.act_bias) / self.act_scalar, \
@@ -130,25 +130,16 @@ class Demonstrations(object):
             return obs, act, np.array(range(obs.shape[0]))
 
     def next_batch(self):
-        if self.batch_pointer == -1 or \
-           self.batch_pointer >= self.cur_obs.shape[0]:
-            self.cur_obs, self.cur_act, _ = self.next_demo(train=True)
-            # arr = np.arange(self.cur_obs.shape[0])
-            # np.random.shuffle(arr)
-            # indexs = [int(i) for i in arr]
-            # self.cur_obs = self.cur_obs[indexs, :]
-            # self.cur_act = self.cur_act[indexs, :]
-            self.batch_pointer = 0
-        ed = min(self.batch_pointer + self.batch_size,
-                 self.cur_obs.shape[0])
-        rt_obs = self.cur_obs[self.batch_pointer:ed, :]
-        rt_act = self.cur_act[self.batch_pointer:ed, :]
-        horizon = self.cur_obs.shape[0]
-        ts = np.zeros((rt_obs.shape[0], 1))
-        for i in range(ed - self.batch_pointer):
-            ts[i, 0] = (i + self.batch_pointer + 0.0) / horizon
-        self.batch_pointer = ed
-        return rt_obs, rt_act, ts
+        obss, acts, tss = [], [], []
+        for i in range(self.batch_size):
+            obs, act, ts = self.next_demo(train=True)
+            obss.append(np.expand_dims(obs, 0))
+            acts.append(np.expand_dims(act, 0))
+            tss.append(np.expand_dims(ts, 0))
+        obss = np.concatenate(obss, 0)
+        acts = np.concatenate(acts, 0)
+        tss = np.concatenate(tss, 0)
+        return obss, acts, tss
 
     def normalize(self):
         obs_full = []
