@@ -190,6 +190,56 @@ class CycleGAIL(object):
                               name=prefix + '.out', reuse=reuse)
         return out
 
+    def sequence_generator(self, x, prefix, out_dim, reuse):
+        with tf.variable_scope(prefix, reuse=reuse):
+            pad_input = tf.pad(
+                x, [[0, 0],
+                    [32 // 2, 32 // 2],
+                    [0, 0]], "CONSTANT")
+            c = general_conv1d(
+                pad_input,
+                num_filters=32,
+                filter_size=1,
+                stride=1,
+                stddev=0.02,
+                name="c1")
+            c = general_conv1d(
+                c,
+                num_filters=32 * 2,
+                filter_size=1,
+                stride=1,
+                stddev=0.02,
+                padding="SAME",
+                name="c2")
+            l = general_conv1d(
+                c,
+                num_filters=32 * 4,
+                filter_size=1,
+                stride=1,
+                stddev=0.02,
+                padding="SAME",
+                name="c3")
+
+            for i in range(5):
+                l = build_resnet_block(
+                    general_conv1d,
+                    l,
+                    dim=32 * 4,
+                    filter_size=1,
+                    pad=True,
+                    name="r%d" % i)
+
+            c = general_conv1d(
+                l,
+                num_filters=out_dim,
+                filter_size=1,
+                stride=1,
+                stddev=0.02,
+                padding="SAME",
+                name="out")
+
+            return c
+
     def dis_net(self, prefix, inp, reuse=True):
         with tf.variable_scope(prefix, reuse=reuse):
             # whether to use dropout ?
@@ -269,6 +319,7 @@ class CycleGAIL(object):
                     self.sess.run(self.fake_b,
                                   feed_dict={self.real_a: np.expand_dims(tj_a, 0),
                                              self.std: 0.0})
+                transed_b = np.squeeze(transed_b)
                 ideal_b = self.calc_ideal_b(tj_a, ita2b, expert_a, expert_b)
 
                 end_time = time.time()
@@ -296,10 +347,12 @@ class CycleGAIL(object):
         return obs_act_pair[:, :obs_dim], obs_act_pair[:, obs_dim:]
 
     def visual_eval(self, expert_a, expert_b, id):
-        tj_a, tj_b, _ = self.get_demo(expert_a, expert_b, istrain=False)
-        transed_b = self.sess.run(self.fake_b,
-                                  feed_dict={self.real_a: tj_a, self.std: 0.0})
+
         if self.vis_mode == 'synthetic':
+            tj_a, tj_b, _ = self.get_demo(expert_a, expert_b, istrain=False)
+            transed_b = \
+                self.sess.run(self.fake_b,
+                              feed_dict={self.real_a: tj_a, self.std: 0.0})
             obs_a, act_a = self.unzip(tj_a, self.a_obs_dim)
             gt_obs_b, gt_act_b = self.unzip(tj_b, self.b_obs_dim)
             obs_b, act_b = self.unzip(transed_b, self.b_obs_dim)
